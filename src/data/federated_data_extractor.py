@@ -6,13 +6,32 @@ def get_mnist():
     '''
     func to get mnist images dataset from tensorflow site
     '''
-    from tensorflow.examples.tutorials.mnist import input_data
-    mnist = input_data.read_data_sets("/tmp/data/", one_hot=True)
-    dataset = dict()
-    dataset["train_images"] = mnist.train.images
-    dataset["train_labels"] = mnist.train.labels
-    dataset["test_images"] = mnist.test.images
-    dataset["test_labels"] = mnist.test.labels
+    # from tensorflow.examples.tutorials.mnist import input_data
+    import tensorflow_datasets as tfds
+    train_ds, test_ds= tfds.load('mnist', split=['train', 'test'], as_supervised=True)
+    print(type(train_ds), type(test_ds))
+    assert isinstance(train_ds, tf.data.Dataset)
+    assert isinstance(test_ds, tf.data.Dataset)
+    dataset = dict({
+        "train_images": [],
+        "train_labels": [],
+        "test_images": [],
+        "test_labels": []
+    })
+
+    for example in train_ds:
+        image, label = example
+        dataset["train_images"].append(image)
+        dataset["train_labels"].append(label)
+
+    for example in test_ds:
+        image, label = example
+        dataset["test_images"].append(image)
+        dataset["test_labels"].append(label)
+    dataset["train_images"] = np.array(dataset["train_images"])
+    dataset["train_labels"] = np.array(dataset["train_labels"])
+    dataset["test_images"] = np.array(dataset["test_images"])
+    dataset["test_labels"] = np.array(dataset["test_labels"])
     return dataset
 
 def save_data(dataset,name="mnist.d"):
@@ -35,6 +54,7 @@ def get_dataset_details(dataset):
     '''
     for k in dataset.keys():
         print(k,dataset[k].shape)
+    return
 
 def split_dataset(dataset,split_count):
     '''

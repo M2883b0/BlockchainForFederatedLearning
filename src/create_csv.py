@@ -1,7 +1,7 @@
 import glob
 import csv
 
-path = '/home/user/Documents/src/clients/'
+path = 'clients/'
 n_devices = 2
 Model_version = 0
 l = len(path)
