@@ -5,7 +5,9 @@ mkdir -p clients
 mkdir -p blocks
 
 echo "Creating datasets for n clients:"
-python data/federated_data_extractor.py
+cd data || exit
+python federated_data_extractor.py
+cd ..
 
 #echo "Start federated learning on n clients:"
 #gnome-terminal -e "python3 miner.py -g 1 -l 2"

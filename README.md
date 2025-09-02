@@ -4,9 +4,14 @@
 首先需要安装依赖包
 
 ```bash
+cd src
 # 如果使用 conda
 conda create -n bcfl python=3.12 -y
 conda activate bcfl
 # 安装pip依赖
 pip install -r requirements.txt -i https://pypi.mirrors.ustc.edu.cn/simple
+
+#初始化环境
+chmod +x init.sh
+./init.sh
 ```
