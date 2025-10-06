@@ -2,8 +2,7 @@
   - Blockchain for Federated Learning - 
 	Client script
 """
-import tensorflow as tf
-import pickle
+
 from federatedlearner import *
 from blockchain import *
 from uuid import uuid4

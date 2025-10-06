@@ -1,5 +1,5 @@
 import pickle
-
+# 测试模块
 with open("/home/user/Documents/src/blocks/federated_model1.block","rb") as f:
 	block = pickle.load(f)
 	model = block.basemodel

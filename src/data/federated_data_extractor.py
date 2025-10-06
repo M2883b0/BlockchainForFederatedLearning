@@ -1,74 +1,83 @@
-import tensorflow as tf
 import numpy as np
 import pickle
+import torch
+from torchvision import datasets, transforms
+
 
 def get_mnist():
     '''
-    func to get mnist images dataset from tensorflow site
+    Function to get MNIST dataset using PyTorch
     '''
-    # from tensorflow.examples.tutorials.mnist import input_data
-    import tensorflow_datasets as tfds
-    train_ds, test_ds= tfds.load('mnist', split=['train', 'test'], as_supervised=True)
-    print(type(train_ds), type(test_ds))
-    assert isinstance(train_ds, tf.data.Dataset)
-    assert isinstance(test_ds, tf.data.Dataset)
-    dataset = dict({
-        "train_images": [],
-        "train_labels": [],
-        "test_images": [],
-        "test_labels": []
-    })
+    # 定义数据转换：转换为Tensor并保持原始像素值 (0-255)
+    transform = transforms.Compose([
+        transforms.ToTensor(),
+        transforms.Lambda(lambda x: x * 255)  # 反转归一化，保持0-255范围
+    ])
 
-    for example in train_ds:
-        image, label = example
-        dataset["train_images"].append(image)
-        dataset["train_labels"].append(label)
+    # 下载并加载数据集
+    train_set = datasets.MNIST(root='./data', train=True, download=True, transform=transform)
+    test_set = datasets.MNIST(root='./data', train=False, download=True, transform=transform)
 
-    for example in test_ds:
-        image, label = example
-        dataset["test_images"].append(image)
-        dataset["test_labels"].append(label)
-    dataset["train_images"] = np.array(dataset["train_images"])
-    dataset["train_labels"] = np.array(dataset["train_labels"])
-    dataset["test_images"] = np.array(dataset["test_images"])
-    dataset["test_labels"] = np.array(dataset["test_labels"])
+    # 准备数据集字典
+    dataset = {
+        "train_images": train_set.data.numpy(),
+        "train_labels": train_set.targets.numpy(),
+        "test_images": test_set.data.numpy(),
+        "test_labels": test_set.targets.numpy()
+    }
+
+    # 添加通道维度 (PyTorch默认没有通道维度)
+    dataset["train_images"] = np.expand_dims(dataset["train_images"], axis=-1)
+    dataset["test_images"] = np.expand_dims(dataset["test_images"], axis=-1)
+
     return dataset
 
-def save_data(dataset,name="mnist.d"):
+
+def save_data(dataset, name="mnist.d"):
     '''
-    Func to save mnist data in binary mode(its good to use binary mode)
+    Save data in binary mode
     '''
-    with open(name,"wb") as f:
-        pickle.dump(dataset,f)
+    with open(name, "wb") as f:
+        pickle.dump(dataset, f)
+
 
 def load_data(name="mnist.d"):
     '''
-    Func to load mnist data in binary mode(for reading also binary mode is important)
-    ''' 
-    with open(name,"rb") as f:
+    Load data from binary file
+    '''
+    with open(name, "rb") as f:
         return pickle.load(f)
+
 
 def get_dataset_details(dataset):
     '''
-    Func to display information on data
+    Display dataset information
     '''
     for k in dataset.keys():
-        print(k,dataset[k].shape)
+        print(k, dataset[k].shape)
     return
 
-def split_dataset(dataset,split_count):
+
+def split_dataset(dataset, split_count):
     '''
-    Function to split dataset to federated data slices as per specified count so as to try federated learning
+    Split dataset into federated data slices
     '''
     datasets = []
-    split_data_length = len(dataset["train_images"])//split_count
+    total_samples = len(dataset["train_images"])
+    samples_per_split = total_samples // split_count
+
     for i in range(split_count):
-        d = dict()
-        d["test_images"] = dataset["test_images"][:]
-        d["test_labels"] = dataset["test_labels"][:]
-        d["train_images"] = dataset["train_images"][i*split_data_length:(i+1)*split_data_length]
-        d["train_labels"] = dataset["train_labels"][i*split_data_length:(i+1)*split_data_length]
+        start_idx = i * samples_per_split
+        end_idx = (i + 1) * samples_per_split
+
+        d = {
+            "test_images": dataset["test_images"].copy(),
+            "test_labels": dataset["test_labels"].copy(),
+            "train_images": dataset["train_images"][start_idx:end_idx],
+            "train_labels": dataset["train_labels"][start_idx:end_idx]
+        }
         datasets.append(d)
+
     return datasets
 
 
@@ -76,8 +85,9 @@ if __name__ == '__main__':
     save_data(get_mnist())
     dataset = load_data()
     get_dataset_details(dataset)
-    for n,d in enumerate(split_dataset(dataset,2)):
-        save_data(d,"federated_data_"+str(n)+".d")
-        dk = load_data("federated_data_"+str(n)+".d")
+
+    for n, d in enumerate(split_dataset(dataset, 2)):
+        save_data(d, "federated_data_" + str(n) + ".d")
+        dk = load_data("federated_data_" + str(n) + ".d")
         get_dataset_details(dk)
         print()

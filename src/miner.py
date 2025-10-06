@@ -19,14 +19,14 @@ import codecs
 import os
 import glob
 
+
 def make_base():
 
-    ''' 
-    Function to do the base level training on the first set of client data 
+    """
+    Function to do the base level training on the first set of client data
     for the genesis block
-    '''
+    """
     reset()
-    dataset = None
     with open("data/federated_data_0.d",'rb') as f:
         dataset = pickle.load(f)
     worker = NNWorker(dataset["train_images"],
