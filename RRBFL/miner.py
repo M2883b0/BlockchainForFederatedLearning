@@ -1,30 +1,31 @@
 """
- - Blockchain for Federated Learning -
-           Mining script 
+ - 区块链联邦学习系统 -
+           矿工节点脚本
+           
+           本模块实现了区块链联邦学习系统中的矿工节点功能，包括：
+           1. 区块生成和挖矿过程管理
+           2. 客户端更新接收和处理
+           3. 区块链网络通信和共识
+           4. 模型存储和检索API
 """
 
-import hashlib
-import json
-import time
-from flask import Flask,jsonify,request
-from uuid import uuid4
-import requests
-import random
-import pickle
-from blockchain import *
-from threading import Thread, Event
-from federatedlearner import *
-import numpy as np
-import codecs
-import os
 import glob
+import os
+
+from flask import jsonify, request
+
+from blockchain import *
+from federatedlearner import *
 
 
 def make_base():
-
     """
-    Function to do the base level training on the first set of client data
-    for the genesis block
+    为创世区块创建基础模型
+    
+    在第一组客户端数据上进行基础级别训练，生成创世区块所需的初始模型
+    
+    返回:
+        包含模型参数和精度的字典
     """
     reset()
     with open("data/federated_data_0.d",'rb') as f:
@@ -44,7 +45,20 @@ def make_base():
 
 
 class PoWThread(Thread):
-    def __init__(self, stop_event,blockchain,node_identifier):
+    """
+    工作量证明线程类
+    
+    在独立线程中执行工作量证明计算
+    """
+    def __init__(self, stop_event, blockchain, node_identifier):
+        """
+        初始化工作量证明线程
+        
+        参数:
+            stop_event: 停止事件标志
+            blockchain: 区块链对象
+            node_identifier: 节点标识符
+        """
         self.stop_event = stop_event
         Thread.__init__(self)
         self.blockchain = blockchain
@@ -52,6 +66,11 @@ class PoWThread(Thread):
         self.response = None
 
     def run(self):
+        """
+        线程运行函数
+        
+        执行工作量证明算法，并在完成时调用回调函数
+        """
         block,stopped = self.blockchain.proof_of_work(self.stop_event)
         self.response = {
             'message':"End mining",
@@ -72,12 +91,23 @@ status = {
     }
 
 def mine():
+    """
+    启动挖矿过程
+    
+    清除停止事件并创建新的工作量证明线程开始挖矿
+    """
     STOP_EVENT.clear()
     thread = PoWThread(STOP_EVENT,status["blockchain"],status["id"])
     status['s'] = "mining"
     thread.start()
 
 def on_end_mining(stopped):
+    """
+    挖矿结束回调函数
+    
+    参数:
+        stopped: 是否因为停止事件而结束挖矿
+    """
     if status['s'] == "receiving":
         return
     if stopped:
@@ -88,6 +118,11 @@ def on_end_mining(stopped):
 
 @app.route('/transactions/new',methods=['POST'])
 def new_transaction():
+    """
+    接收新的客户端更新
+    
+    处理客户端提交的模型更新，并在满足条件时触发挖矿
+    """
     if status['s'] != "receiving":
         return 'Miner not receiving', 400
     values = request.get_json()
@@ -114,6 +149,11 @@ def new_transaction():
 
 @app.route('/status',methods=['GET'])
 def get_status():
+    """
+    获取矿工节点状态
+    
+    返回当前挖矿状态和最后一个模型的索引
+    """
     response = {
         'status': status['s'],
         'last_model_index': status['blockchain'].last_block['index']
@@ -122,6 +162,11 @@ def get_status():
 
 @app.route('/chain',methods=['GET'])
 def full_chain():
+    """
+    获取完整的区块链信息
+    
+    返回整个哈希链和其长度
+    """
     response = {
         'chain': status['blockchain'].hashchain,
         'length':len(status['blockchain'].hashchain)
@@ -130,6 +175,11 @@ def full_chain():
 
 @app.route('/nodes/register',methods=['POST'])
 def register_nodes():
+    """
+    注册新节点
+    
+    将新的矿工节点添加到区块链网络中
+    """
     values = request.get_json()
     nodes = values.get('nodes')
     if nodes is None:
@@ -150,6 +200,11 @@ def register_nodes():
 
 @app.route('/block',methods=['POST'])
 def get_block():
+    """
+    获取指定区块
+    
+    根据区块哈希信息返回完整的区块数据
+    """
     values = request.get_json()
     hblock = values['hblock']
     block = None
@@ -178,6 +233,11 @@ def get_block():
 
 @app.route('/model',methods=['POST'])
 def get_model():
+    """
+    获取区块中的模型
+    
+    根据区块哈希信息返回其中的模型参数
+    """
     values = request.get_json()
     hblock = values['hblock']
     block = None
@@ -207,6 +267,11 @@ def get_model():
 
 @app.route('/nodes/resolve',methods=["GET"])
 def consensus():
+    """
+    解决区块链冲突
+    
+    执行共识算法，确保所有节点使用相同的区块链
+    """
     replaced = status['blockchain'].resolve_conflicts(STOP_EVENT)
     if replaced:
         response = {
@@ -223,6 +288,11 @@ def consensus():
 
 @app.route('/stopmining',methods=['GET'])
 def stop_mining():
+    """
+    停止挖矿过程
+    
+    触发区块链冲突解决并停止当前挖矿
+    """
     status['blockchain'].resolve_conflicts(STOP_EVENT)
     response = {
         'mex':"stopped!"
@@ -230,6 +300,11 @@ def stop_mining():
     return jsonify(response),200
 
 def delete_prev_blocks():
+    """
+    删除之前的区块文件
+    
+    清理blocks目录下的所有区块文件
+    """
     files = glob.glob('blocks/*.block')
     for f in files:
         os.remove(f)

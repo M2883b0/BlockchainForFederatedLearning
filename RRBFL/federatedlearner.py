@@ -1,3 +1,14 @@
+"""
+- 区块链联邦学习系统 -
+ 联邦学习器模块
+ 
+ 本模块实现了联邦学习中的神经网络训练功能，包括：
+ 1. 神经网络模型的构建和初始化
+ 2. 模型训练和评估
+ 3. 权重参数的获取和设置
+ 4. 中心化训练精度计算
+"""
+
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -6,11 +17,33 @@ import pickle
 from torch.utils.data import TensorDataset, DataLoader
 
 def reset():
+    """
+    重置计算资源
+    
+    PyTorch不需要显式重置计算图，但保留此函数以保持API一致性
+    """
     # PyTorch 不需要显式重置计算图
     pass
 
 class NNWorker:
+    """
+    神经网络工作器类
+    
+    实现神经网络模型的构建、训练和评估功能
+    """
     def __init__(self, X=None, Y=None, tX=None, tY=None, size=0, Id="nn0", steps=10):
+        """
+        初始化神经网络工作器
+        
+        参数:
+            X: 训练数据特征
+            Y: 训练数据标签
+            tX: 测试数据特征
+            tY: 测试数据标签
+            size: 数据大小
+            Id: 工作器标识符
+            steps: 训练步数
+        """
         self.id = Id
         self.train_x = torch.tensor(X, dtype=torch.float32) if X is not None else None
         self.train_y = torch.tensor(Y, dtype=torch.long) if Y is not None else None
@@ -27,7 +60,12 @@ class NNWorker:
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     def build(self, base):
-        """构建基于基础权重的模型"""
+        """
+        构建基于基础权重的模型
+        
+        参数:
+            base: 基础模型参数字典，包含w1, b1, w2, b2, wo, bo等权重和偏置
+        """
         self.model = nn.Sequential(
             nn.Flatten(),
             nn.Linear(self.num_input, self.n_hidden_1),
@@ -53,7 +91,11 @@ class NNWorker:
         self.criterion = nn.CrossEntropyLoss()
 
     def build_base(self):
-        """构建随机初始化的基础模型"""
+        """
+        构建随机初始化的基础模型
+        
+        创建一个新的神经网络模型，并随机初始化权重参数
+        """
         self.model = nn.Sequential(
             nn.Flatten(),
             nn.Linear(self.num_input, self.n_hidden_1),
@@ -68,7 +110,11 @@ class NNWorker:
         self.criterion = nn.CrossEntropyLoss()
 
     def train(self):
-        """训练模型"""
+        """
+        训练模型
+        
+        使用提供的训练数据对模型进行指定步数的训练
+        """
         if self.train_x is None or self.train_y is None:
             raise ValueError("Training data not provided")
 
@@ -97,7 +143,14 @@ class NNWorker:
         print("Optimization Finished!")
 
     def centralized_accuracy(self):
-        """计算中心化训练精度"""
+        """
+        计算中心化训练精度
+        
+        在完整数据集上进行中心化训练，并记录每一步的精度
+        
+        返回:
+            cntz_acc: 包含每轮训练精度的字典
+        """
         cntz_acc = {'epoch': [], 'accuracy': []}
 
         # 构建基础模型
@@ -130,7 +183,12 @@ class NNWorker:
         return cntz_acc
 
     def evaluate(self):
-        """评估模型在测试集上的精度"""
+        """
+        评估模型在测试集上的精度
+        
+        返回:
+            accuracy: 模型在测试集上的准确率
+        """
         if self.model is None:
             raise ValueError("Model not built. Call build() or build_base() first.")
         if self.test_x is None or self.test_y is None:
@@ -147,7 +205,14 @@ class NNWorker:
         return accuracy
 
     def get_model(self):
-        """获取模型权重"""
+        """
+        获取模型权重参数
+        
+        提取并返回模型的所有权重和偏置参数
+        
+        返回:
+            包含w1, b1, w2, b2, wo, bo等参数的字典
+        """
         if self.model is None:
             raise ValueError("Model not built. Call build() or build_base() first.")
 
@@ -163,6 +228,10 @@ class NNWorker:
         }
 
     def close(self):
-        """关闭模型资源"""
+        """
+        关闭模型资源
+        
+        释放模型占用的内存资源
+        """
         del self.model
         self.model = None

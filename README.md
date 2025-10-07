@@ -4,7 +4,7 @@
 首先需要安装依赖包
 
 ```bash
-cd src
+cd RRBFL
 # 如果使用 conda
 conda create -n bcfl python=3.12 -y
 conda activate bcfl

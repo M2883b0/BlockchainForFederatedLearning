@@ -1,3 +1,14 @@
+"""
+- 区块链联邦学习系统 -
+  联邦学习数据提取器
+  
+  本模块实现了MNIST数据集的获取、分割和持久化存储功能，包括：
+  1. 从PyTorch获取MNIST数据集
+  2. 数据集的分割，用于联邦学习场景
+  3. 数据的保存和加载
+  4. 数据集信息显示
+"""
+
 import numpy as np
 import pickle
 import torch
@@ -5,9 +16,12 @@ from torchvision import datasets, transforms
 
 
 def get_mnist():
-    '''
-    Function to get MNIST dataset using PyTorch
-    '''
+    """
+    使用PyTorch获取MNIST数据集
+    
+    返回:
+        dataset: 包含训练和测试数据的字典
+    """
     # 定义数据转换：转换为Tensor并保持原始像素值 (0-255)
     transform = transforms.Compose([
         transforms.ToTensor(),
@@ -34,34 +48,54 @@ def get_mnist():
 
 
 def save_data(dataset, name="mnist.d"):
-    '''
-    Save data in binary mode
-    '''
+    """
+    将数据集以二进制模式保存到文件
+    
+    参数:
+        dataset: 要保存的数据集
+        name: 文件名
+    """
     with open(name, "wb") as f:
         pickle.dump(dataset, f)
 
 
 def load_data(name="mnist.d"):
-    '''
-    Load data from binary file
-    '''
+    """
+    从二进制文件加载数据集
+    
+    参数:
+        name: 文件名
+        
+    返回:
+        加载的数据集
+    """
     with open(name, "rb") as f:
         return pickle.load(f)
 
 
 def get_dataset_details(dataset):
-    '''
-    Display dataset information
-    '''
+    """
+    显示数据集信息
+    
+    参数:
+        dataset: 要显示信息的数据集
+    """
     for k in dataset.keys():
         print(k, dataset[k].shape)
     return
 
 
 def split_dataset(dataset, split_count):
-    '''
-    Split dataset into federated data slices
-    '''
+    """
+    将数据集分割成多个联邦数据切片
+    
+    参数:
+        dataset: 要分割的原始数据集
+        split_count: 分割数量
+        
+    返回:
+        datasets: 分割后的数据集列表
+    """
     datasets = []
     total_samples = len(dataset["train_images"])
     samples_per_split = total_samples // split_count
