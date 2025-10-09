@@ -17,9 +17,11 @@
 
 import numpy as np
 import pickle
+import torch
 from torchvision import datasets, transforms
 
 
+# 获取MNIST数据集
 def get_mnist():
     """
     使用PyTorch获取MNIST数据集
@@ -52,6 +54,7 @@ def get_mnist():
     return dataset
 
 
+# 数据保存功能
 def save_data(dataset, name="mnist.d"):
     """
     将数据集以二进制模式保存到文件
@@ -64,6 +67,7 @@ def save_data(dataset, name="mnist.d"):
         pickle.dump(dataset, f)
 
 
+# 数据加载功能
 def load_data(name="mnist.d"):
     """
     从二进制文件加载数据集
@@ -78,6 +82,7 @@ def load_data(name="mnist.d"):
         return pickle.load(f)
 
 
+# 数据集信息显示
 def get_dataset_details(dataset):
     """
     显示数据集信息
@@ -90,6 +95,7 @@ def get_dataset_details(dataset):
     return
 
 
+# 数据集分割功能
 def split_dataset(dataset, split_count):
     """
     将数据集分割成多个联邦数据切片
@@ -120,11 +126,48 @@ def split_dataset(dataset, split_count):
     return datasets
 
 
+# 创建客户端数据加载器
+def create_client_dataloaders(train_dataset, num_clients, batch_size, shuffle=True, verbose=True):
+    """
+    为联邦学习创建客户端数据加载器
+    
+    Args:
+        train_dataset: 完整的训练数据集
+        num_clients: 客户端数量
+        batch_size: 每个批次的样本数
+        shuffle: 是否打乱数据
+        verbose: 是否打印详细信息
+        
+    Returns:
+        List[DataLoader]: 每个客户端的数据加载器列表
+    """
+    client_dataloaders = []
+    total_train_size = len(train_dataset)
+    client_train_size = total_train_size // num_clients
+    
+    if verbose:
+        print(f"\n为{num_clients}个客户端分配数据集...")
+        
+    # 为每个客户端创建数据加载器
+    for i in range(num_clients):
+        # 为每个客户端随机选择一部分数据
+        client_indices = torch.randperm(total_train_size)[:client_train_size]
+        client_dataset = torch.utils.data.Subset(train_dataset, client_indices)
+        client_loader = torch.utils.data.DataLoader(
+            client_dataset, batch_size=batch_size, shuffle=shuffle)
+        client_dataloaders.append(client_loader)
+        
+        if verbose:
+            print(f"客户端 {i+1} 数据准备完成，样本数: {len(client_dataset)}")
+    
+    return client_dataloaders
+
+
 if __name__ == '__main__':
     save_data(get_mnist())
     dataset = load_data()
     get_dataset_details(dataset)
-
+    print("data_split.py test")
     for n, d in enumerate(split_dataset(dataset, 2)):
         save_data(d, "federated_data_" + str(n) + ".d")
         dk = load_data("federated_data_" + str(n) + ".d")
