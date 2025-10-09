@@ -58,7 +58,7 @@ class PoWThread(Thread):
         
         参数:
             stop_event: 停止事件标志
-            blockchain: 区块链对象
+            BlockChain: 区块链对象
             node_identifier: 节点标识符
         """
         self.stop_event = stop_event
@@ -88,7 +88,7 @@ app = Flask(__name__)
 status = {
     's':"receiving",
     'id':str(uuid4()).replace('-',''),
-    'blockchain': None,
+    'BlockChain': None,
     'address' : ""
     }
 
@@ -99,7 +99,7 @@ def mine():
     清除停止事件并创建新的工作量证明线程开始挖矿
     """
     STOP_EVENT.clear()
-    thread = PoWThread(STOP_EVENT,status["blockchain"],status["id"])
+    thread = PoWThread(STOP_EVENT,status["BlockChain"],status["id"])
     status['s'] = "mining"
     thread.start()
 
@@ -113,9 +113,9 @@ def on_end_mining(stopped):
     if status['s'] == "receiving":
         return
     if stopped:
-        status["blockchain"].resolve_conflicts(STOP_EVENT)
+        status["BlockChain"].resolve_conflicts(STOP_EVENT)
     status['s'] = "receiving"
-    for node in status["blockchain"].nodes:
+    for node in status["BlockChain"].nodes:
         requests.get('http://{node}/stopmining'.format(node=node))
 
 @app.route('/transactions/new',methods=['POST'])
@@ -132,19 +132,19 @@ def new_transaction():
     required = ['client','baseindex','update','datasize','computing_time']
     if not all(k in values for k in required):
         return 'Missing values', 400
-    if values['client'] in status['blockchain'].current_updates:
+    if values['client'] in status['BlockChain'].current_updates:
         return 'Model already stored', 400
-    index = status['blockchain'].new_update(values['client'],
+    index = status['BlockChain'].new_update(values['client'],
         values['baseindex'],
         dict(pickle.loads(codecs.decode(values['update'].encode(), "base64"))),
         values['datasize'],
         values['computing_time'])
-    for node in status["blockchain"].nodes:
+    for node in status["BlockChain"].nodes:
         requests.post('http://{node}/transactions/new'.format(node=node),
             json=request.get_json())
     if (status['s']=='receiving' and (
-        len(status["blockchain"].current_updates)>=status['blockchain'].last_block['update_limit']
-        or time.time()-status['blockchain'].last_block['timestamp']>status['blockchain'].last_block['time_limit'])):
+        len(status["BlockChain"].current_updates)>=status['BlockChain'].last_block['update_limit']
+        or time.time()-status['BlockChain'].last_block['timestamp']>status['BlockChain'].last_block['time_limit'])):
         mine()
     response = {'message': "Update will be added to block {index}".format(index=index)}
     return jsonify(response),201
@@ -158,7 +158,7 @@ def get_status():
     """
     response = {
         'status': status['s'],
-        'last_model_index': status['blockchain'].last_block['index']
+        'last_model_index': status['BlockChain'].last_block['index']
         }
     return jsonify(response),200
 
@@ -170,8 +170,8 @@ def full_chain():
     返回整个哈希链和其长度
     """
     response = {
-        'chain': status['blockchain'].hashchain,
-        'length':len(status['blockchain'].hashchain)
+        'chain': status['BlockChain'].hashchain,
+        'length':len(status['BlockChain'].hashchain)
     }
     return jsonify(response),200
 
@@ -187,16 +187,16 @@ def register_nodes():
     if nodes is None:
         return "Error: Enter valid nodes in the list ", 400
     for node in nodes:
-        if node!=status['address'] and not node in status['blockchain'].nodes:
-            status['blockchain'].register_node(node)
-            for miner in status['blockchain'].nodes:
+        if node!=status['address'] and not node in status['BlockChain'].nodes:
+            status['BlockChain'].register_node(node)
+            for miner in status['BlockChain'].nodes:
                 if miner!=node:
                     print("node",node,"miner",miner)
                     requests.post('http://{miner}/nodes/register'.format(miner=miner),
                         json={'nodes': [node]})
     response = {
         'message':"New nodes have been added",
-        'total_nodes':list(status['blockchain'].nodes)
+        'total_nodes':list(status['BlockChain'].nodes)
     }
     return jsonify(response),201
 
@@ -210,8 +210,8 @@ def get_block():
     values = request.get_json()
     hblock = values['hblock']
     block = None
-    if status['blockchain'].curblock.index == hblock['index']:
-        block = status['blockchain'].curblock
+    if status['BlockChain'].curblock.index == hblock['index']:
+        block = status['BlockChain'].curblock
     elif os.path.isfile("./blocks/federated_model"+str(hblock['index'])+".block"):
         with open("./blocks/federated_model"+str(hblock['index'])+".block","rb") as f:
             block = pickle.load(f)
@@ -243,8 +243,8 @@ def get_model():
     values = request.get_json()
     hblock = values['hblock']
     block = None
-    if status['blockchain'].curblock.index == hblock['index']:
-        block = status['blockchain'].curblock
+    if status['BlockChain'].curblock.index == hblock['index']:
+        block = status['BlockChain'].curblock
     elif os.path.isfile("./blocks/federated_model"+str(hblock['index'])+".block"):
         with open("./blocks/federated_model"+str(hblock['index'])+".block","rb") as f:
             block = pickle.load(f)
@@ -274,16 +274,16 @@ def consensus():
     
     执行共识算法，确保所有节点使用相同的区块链
     """
-    replaced = status['blockchain'].resolve_conflicts(STOP_EVENT)
+    replaced = status['BlockChain'].resolve_conflicts(STOP_EVENT)
     if replaced:
         response = {
             'message': 'Our chain was replaced',
-            'new_chain': status['blockchain'].hashchain
+            'new_chain': status['BlockChain'].hashchain
         }
     else:
         response = {
             'message': 'Our chain is authoritative',
-            'chain': status['blockchain'].hashchain
+            'chain': status['BlockChain'].hashchain
         }
     return jsonify(response), 200
 
@@ -295,7 +295,7 @@ def stop_mining():
     
     触发区块链冲突解决并停止当前挖矿
     """
-    status['blockchain'].resolve_conflicts(STOP_EVENT)
+    status['BlockChain'].resolve_conflicts(STOP_EVENT)
     response = {
         'mex':"stopped!"
     }
@@ -328,11 +328,11 @@ if __name__ == '__main__':
     if args.genesis==1:
         model = make_base()
         print("base model accuracy:",model['accuracy'])
-        status['blockchain'] = Blockchain(address,model,True,args.ulimit)
+        status['BlockChain'] = Blockchain(address,model,True,args.ulimit)
     else:
-        status['blockchain'] = Blockchain(address)
-        status['blockchain'].register_node(args.maddress)
+        status['BlockChain'] = Blockchain(address)
+        status['BlockChain'].register_node(args.maddress)
         requests.post('http://{node}/nodes/register'.format(node=args.maddress),
             json={'nodes': [address]})
-        status['blockchain'].resolve_conflicts(STOP_EVENT)
+        status['BlockChain'].resolve_conflicts(STOP_EVENT)
     app.run(host=args.host,port=args.port)
