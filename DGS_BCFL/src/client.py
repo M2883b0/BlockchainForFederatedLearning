@@ -3,16 +3,33 @@
 # @Time :2025/10/9 14:32
 # @Author :M2883b0
 import torch
-import torchvision.transforms as transforms
 from torch.utils.data import DataLoader
-from queue import Queue
+import threading
 
-from .FederatedLearning.learner import FederatedLearner, CNNModel
 from .FederatedLearning.aggregator import Aggregator
+from .FederatedLearning.learner import FederatedLearner
 
+
+# main_dict = {
+#     "role": [
+#         {"client_1": "leaner"}
+#     ],
+#     "global_model": [
+#         ""
+#     ],
+#     "client_gradients": [
+#
+#     ],
+#     "votes": [
+#         ["client_1", "client_2"]
+#       ],
+#     "contribution": {
+#         "client_1": 0.5
+#     }
+# }
 
 class Client:
-    def __init__(self, epochs: int, client_name: str, data_loader: DataLoader, role_queue: Queue):
+    def __init__(self, epochs: int, client_name: str, data_loader: DataLoader, main_dict: dict):
         """
         初始化客户端
         
@@ -24,11 +41,11 @@ class Client:
         """
         self.role = ""
         self.epochs = epochs
+        self.round = 0
         self.name = client_name
         self.data_loader = data_loader
-        self.role_queue = role_queue
-        self.global_model = CNNModel()  # 默认使用CNN模型作为全局模型
-        self.collected_gradients = []  # 用于聚合者收集梯度
+        self.main_dict = main_dict
+        self.global_model = None  # 默认使用CNN模型作为全局模型
 
     def get_global_model(self):
         """
@@ -37,8 +54,7 @@ class Client:
         Returns:
             torch.nn.Module: 全局模型实例
         """
-        # 在实际应用中，这里应该从服务器或区块链获取最新的全局模型
-        # 这里简单返回当前持有的全局模型
+        self.global_model = self.main_dict["global_model"][-1]
         return self.global_model
 
     def get_role(self):
@@ -48,11 +64,7 @@ class Client:
         Returns:
             str: 角色名称
         """
-        if not self.role_queue.empty():
-            self.role = self.role_queue.get()
-        else:
-            # 如果队列为空，默认使用learner角色
-            self.role = "learner"
+        self.role = self.main_dict["role"][-1][self.name]
         print(f"[{self.name}] 当前轮次角色: {self.role}")
         return self.role
 
@@ -60,27 +72,25 @@ class Client:
         """
         运行客户端，根据每轮的角色执行相应的任务
         """
-        for epoch in range(self.epochs):
-            # 获取当前轮次的角色
-            current_role = self.get_role()
-            print(f"[{self.name}] {current_role}开始训练第{epoch + 1}个epoch")
-            
-            if current_role == "aggregator":
-                # 聚合者角色
-                self._run_as_aggregator()
-            elif current_role == "learner":
-                # 学习者角色
-                gradients = self._run_as_learner()
-                # 模拟将梯度发送给聚合者（在实际应用中可能通过网络或区块链传输）
-                self._send_gradients(gradients)
-            elif current_role == "validator":
-                # 验证者角色
-                self._run_as_validator()
-            else:
-                raise ValueError(f"无效的客户端角色: {current_role}")
-            
-            print(f"[{self.name}] {current_role}结束训练第{epoch + 1}个epoch")
-            print("=" * 50)
+        # 获取当前轮次的角色
+        current_role = self.get_role()
+        if current_role == "aggregator":
+            # 聚合者角色
+            self._run_as_aggregator()
+        elif current_role == "learner":
+            # 学习者角色
+            gradients = self._run_as_learner()
+            # 模拟将梯度发送给聚合者（在实际应用中可能通过网络或区块链传输）
+            self._send_gradients(gradients)
+        elif current_role == "validator":
+            # 验证者角色
+            self._run_as_validator()
+        else:
+            raise ValueError(f"无效的客户端角色: {current_role}")
+
+        print(f"[{self.name}] {current_role}结束第{self.round + 1}轮任务")
+        self.round += 1
+        print("=" * 70)
 
     def _run_as_aggregator(self):
         """
@@ -88,32 +98,42 @@ class Client:
         """
         # 获取全局模型
         global_model = self.get_global_model()
-        
         # 创建聚合器实例
         aggregator = Aggregator(global_model)
         
         print(f"[{self.name}] 聚合者开始收集梯度...")
-        
-        # 模拟已经收集了一些梯度（实际应用中应该从其他客户端接收）
-        # 这里简单检查是否有预存的梯度
-        if self.collected_gradients:
-            for gradients in self.collected_gradients:
-                aggregator.collect_gradients(gradients)
-            
-            # 执行梯度聚合
-            print(f"[{self.name}] 开始聚合梯度...")
-            aggregated_gradients = aggregator.aggregate()
-            
-            # 更新全局模型
-            print(f"[{self.name}] 开始更新全局模型...")
-            aggregator.update_global_model(aggregated_gradients)
-            
-            # 更新本地保存的全局模型
-            self.global_model = aggregator.global_model
-            
-            print(f"[{self.name}] 全局模型更新完成！")
-        else:
-            print(f"[{self.name}] 没有可聚合的梯度！")
+        # 等待所有客户端开始梯度计算, 验证者开始投票
+        while True:
+            cg_list = self.main_dict["client_gradients"]
+            votes_list = self.main_dict["votes"]
+            if cg_list and votes_list and len(cg_list)== len(votes_list) == self.round + 1:
+                client_gradients = cg_list[self.round]
+                votes = votes_list[self.round]
+                break
+        # 获取训练者数量
+        role_dict = self.main_dict["role"][self.round]
+        roles_li = role_dict.items()
+        learner_nums = roles_li.count("learner")
+        validator_nums = roles_li.count("validator")
+        # 等待所有客户端完成梯度计算，验证者完成投票
+        while True:
+            if len(client_gradients) == learner_nums and len(votes) == validator_nums:
+                break
+        for gradients in self.collected_gradients:
+            aggregator.collect_gradients(gradients)
+
+        # 执行梯度聚合
+        print(f"[{self.name}] 开始聚合梯度...")
+        aggregated_gradients = aggregator.aggregate()
+
+        # 更新全局模型
+        print(f"[{self.name}] 开始更新全局模型...")
+        aggregator.update_global_model(aggregated_gradients)
+
+        # 更新本地保存的全局模型
+        self.global_model = aggregator.global_model
+
+        print(f"[{self.name}] 全局模型更新完成！")
 
     def _run_as_learner(self):
         """
