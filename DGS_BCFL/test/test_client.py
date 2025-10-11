@@ -11,57 +11,65 @@ from queue import Queue
 
 from DGS_BCFL.src.FederatedLearning.learner import FederatedLearner, CNNModel
 from DGS_BCFL.src.client import Client
-
-
-def prepare_test_data():
-    """
-    准备测试用的MNIST数据集
-    
-    Returns:
-        DataLoader: 测试数据加载器
-    """
-    transform = transforms.Compose([
-        transforms.ToTensor(),
-        transforms.Normalize((0.1307,), (0.3081,))
-    ])
-
-    # 加载MNIST数据集
-    test_dataset = torchvision.datasets.MNIST(
-        root='./data', train=False, download=True, transform=transform)
-
-    # 创建数据加载器
-    test_loader = DataLoader(test_dataset, batch_size=32, shuffle=False)
-
-    return test_loader
-
-
-def run_client_test():
-    """
-    运行客户端测试
-    """
-    print("开始运行客户端测试...")
-    
-    # 准备测试数据
-    test_loader = prepare_test_data()
-    
-    # 创建角色队列，定义每轮的角色
-    role_queue = Queue()
-    # 添加三轮的角色：learner -> aggregator -> validator
-    role_queue.put("learner")
-    role_queue.put("aggregator")
-    role_queue.put("validator")
-    
-    # 创建客户端实例
-    client = Client(epochs=3, client_name="TestClient", data_loader=test_loader, role_queue=role_queue)
-    
-    # 运行客户端
-    client.run()
-    
-    print("客户端测试完成！")
+from DGS_BCFL.src import data_split
 
 
 if __name__ == '__main__':
     """
     客户端测试入口
+    客户端总数 10
+    聚合者 1
+    验证者 3
+    训练者 6
     """
-    run_client_test()
+    clients_num = 10
+    aggregators_num = 1
+    validators_num = 3
+    learners_num = 6
+
+    dataset = data_split.get_mnist()
+    client_dataloaders = data_split.create_client_dataloaders(dataset["train_images"], 5, 64) * 2
+    print(type(client_dataloaders[0]))
+    main_dict = {
+      "role": [{}],
+      "global_model": [],
+      "client_gradients":[],
+      "votes": [],
+      "contribution": {}
+    }
+
+    # 初始化客户端以及身份
+    clients = []
+    role_dict = main_dict["role"][0]
+    for i in range(clients_num):
+        client_name = f"client_{i+1}"
+        client = Client(epochs=5, client_name=client_name, data_loader=client_dataloaders[i], ModelClass=CNNModel, main_dict=main_dict)
+        main_dict["contribution"][client_name] = 0
+        if aggregators_num > 0:
+            role_dict[client_name] = "aggregator"
+            aggregators_num -= 1
+        elif validators_num > 0:
+            role_dict[client_name] = "validator"
+            validators_num -= 1
+        else:
+            role_dict[client_name] = "learner"
+            learners_num -= 1
+        clients.append(client)
+
+    # 创建目录
+    import os
+    if not os.path.exists("./global_model"):
+        os.mkdir("./global_model")
+    if not os.path.exists("./client_gradients"):
+        os.mkdir("./client_gradients")
+    # 初始化全局模型
+    init_global_model = CNNModel()
+    path = "./global_model/init_global_model"
+    torch.save(init_global_model.state_dict(), path)
+    main_dict["global_model"].append(path)
+    print(f"已保存初始全局模型到 {path}")
+    print(f"main_dict is {main_dict}")
+    import threading
+    t = [threading.Thread(target=client.run) for client in clients]
+    _ = [i.start() for i in t]
+    _ = [i.join for i in t]

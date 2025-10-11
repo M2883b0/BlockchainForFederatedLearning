@@ -11,10 +11,10 @@ main_dict = {
     "./global_model.pth",
   ],
   "client_gradients":[
-    ["./client_1_model.pth", "./client_2_model.pth"]
+    [("learner_1_sign", "./client_1_model.pth"), "./client_2_model.pth"]
   ],
   "votes": [
-    ["client_1", "client_2"]
+    [("learner_1", "client_1", True), ("learner_1", "client_1", False)]
   ],
   "contribution": {
     "client_1": 0.5
