@@ -21,6 +21,7 @@ import hashlib
 import json
 from typing import Tuple, List, Dict, Any, Optional, Set
 from .lattice import LatticeParameters, LatticeOperations
+from ..utils.logger import setup_logger, info, debug, warning, error
 
 
 class DynamicGroupSignature:
@@ -242,7 +243,7 @@ class DynamicGroupSignature:
             
             return True
         except Exception as e:
-            print(f"验证异常: {e}")
+            error(f"验证异常: {e}")
             return False
     
     def revoke_member(self, member_id: str) -> bool:

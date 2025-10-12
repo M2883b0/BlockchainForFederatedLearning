@@ -12,6 +12,7 @@ from typing import Dict, List, Any, Tuple
 import torchvision
 import torchvision.transforms as transforms
 import time
+from DGS_BCFL.src.utils.logger import setup_logger, info, debug, warning, error
 
 
 # 全局模型定义
@@ -135,8 +136,8 @@ class FederatedLearner:
         else:
             self.device = torch.device(device)
 
-        print(f"FederatedLearner使用设备: {self.device}")
-
+        # info(f"FederatedLearner使用设备: {self.device}")
+        #
         self.model = copy.deepcopy(model).to(self.device)
         self.global_model = copy.deepcopy(model).to(self.device)
         self.data_loader = data_loader
@@ -161,8 +162,9 @@ class FederatedLearner:
             epoch_loss = 0.0
             epoch_correct = 0
             epoch_total = 0
-
+            count = 0
             for data, target in self.data_loader:
+                count += 1
                 data, target = data.to(self.device), target.to(self.device)
 
                 # 梯度清零
@@ -187,9 +189,9 @@ class FederatedLearner:
             correct += epoch_correct
             total += epoch_total
 
-            # 打印每轮训练结果
-            print(
-                f'客户端训练轮次 {epoch + 1}/{self.epochs}: 损失={epoch_loss / len(self.data_loader):.4f}, ' f'准确率={100 * epoch_correct / epoch_total:.2f}%')
+            # 记录每轮训练结果
+            info(
+                f'客户端训练轮次 {epoch + 1}/{self.epochs}: 损失={epoch_loss / len(self.data_loader):.4f}, 准确率={100 * epoch_correct / epoch_total:.2f}%')
 
         # 计算平均损失和准确率
         avg_loss = total_loss / self.epochs
@@ -288,5 +290,5 @@ class FederatedLearner:
 
 if __name__ == '__main__':
     # 提示用户使用test_FL.py进行测试
-    print("请使用 test_FL.py 文件来运行联邦学习系统测试。")
-    print("测试脚本包含完整的多客户端联邦学习训练和聚合过程。")
+    info("请使用 test_FL.py 文件来运行联邦学习系统测试。")
+    info("测试脚本包含完整的多客户端联邦学习训练和聚合过程。")

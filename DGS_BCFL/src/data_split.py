@@ -15,119 +15,35 @@
   4. 数据集信息显示
 """
 
-import numpy as np
-import pickle
 import torch
 from torchvision import datasets, transforms
+from DGS_BCFL.src.utils.logger import setup_logger, info, debug, warning, error
 
 
-# 获取MNIST数据集
-def get_mnist():
+def get_mnist_pytorch_dataset(train=True, transform=None):
     """
-    使用PyTorch获取MNIST数据集
+    获取PyTorch格式的MNIST数据集对象
+
+    参数:
+        train: 是否返回训练数据集，True为训练集，False为测试集
+        transform: 数据转换方法，如果为None则使用默认转换
 
     返回:
-        dataset: 包含训练和测试数据的字典
+        torch.utils.data.Dataset: MNIST数据集对象
     """
-    # 定义数据转换：转换为Tensor并保持原始像素值 (0-255)
-    transform = transforms.Compose([
-        transforms.ToTensor(),
-        transforms.Lambda(lambda x: x * 255)  # 反转归一化，保持0-255范围
-    ])
-
-    # 下载并加载数据集
-    train_set = datasets.MNIST(root='./data', train=True, download=True, transform=transform)
-    test_set = datasets.MNIST(root='./data', train=False, download=True, transform=transform)
-
-    # 准备数据集字典
-    dataset = {
-        "train_images": train_set.data.numpy(),
-        "train_labels": train_set.targets.numpy(),
-        "test_images": test_set.data.numpy(),
-        "test_labels": test_set.targets.numpy()
-    }
-
-    # 添加通道维度 (PyTorch默认没有通道维度)
-    dataset["train_images"] = np.expand_dims(dataset["train_images"], axis=-1)
-    dataset["test_images"] = np.expand_dims(dataset["test_images"], axis=-1)
-
-    return dataset
-
-
-# 数据保存功能
-def save_data(dataset, name="mnist.d"):
-    """
-    将数据集以二进制模式保存到文件
-
-    参数:
-        dataset: 要保存的数据集
-        name: 文件名
-    """
-    with open(name, "wb") as f:
-        pickle.dump(dataset, f)
-
-
-# 数据加载功能
-def load_data(name="mnist.d"):
-    """
-    从二进制文件加载数据集
-
-    参数:
-        name: 文件名
-
-    返回:
-        加载的数据集
-    """
-    with open(name, "rb") as f:
-        return pickle.load(f)
-
-
-# 数据集信息显示
-def get_dataset_details(dataset):
-    """
-    显示数据集信息
-
-    参数:
-        dataset: 要显示信息的数据集
-    """
-    for k in dataset.keys():
-        print(k, dataset[k].shape)
-    return
-
-
-# 数据集分割功能
-def split_dataset(dataset, split_count):
-    """
-    将数据集分割成多个联邦数据切片
-
-    参数:
-        dataset: 要分割的原始数据集
-        split_count: 分割数量
-
-    返回:
-        datasets: 分割后的数据集列表
-    """
-    datasets = []
-    total_samples = len(dataset["train_images"])
-    samples_per_split = total_samples // split_count
-
-    for i in range(split_count):
-        start_idx = i * samples_per_split
-        end_idx = (i + 1) * samples_per_split
-
-        d = {
-            "test_images": dataset["test_images"].copy(),
-            "test_labels": dataset["test_labels"].copy(),
-            "train_images": dataset["train_images"][start_idx:end_idx],
-            "train_labels": dataset["train_labels"][start_idx:end_idx]
-        }
-        datasets.append(d)
-
-    return datasets
+    if transform is None:
+        # 使用标准的MNIST数据转换，与test_client.py中的转换保持一致
+        transform = transforms.Compose([
+            transforms.ToTensor(),
+            transforms.Normalize((0.1307,), (0.3081,))
+        ])
+    
+    # 返回PyTorch格式的MNIST数据集
+    return datasets.MNIST(root='./data', train=train, download=True, transform=transform)
 
 
 # 创建客户端数据加载器
-def create_client_dataloaders(train_dataset, num_clients, batch_size, shuffle=True, verbose=True):
+def create_client_dataloaders(train_dataset, num_clients, batch_size, shuffle=True, verbose=True, num_workers=4, pin_memory=True):
     """
     为联邦学习创建客户端数据加载器
     
@@ -137,6 +53,8 @@ def create_client_dataloaders(train_dataset, num_clients, batch_size, shuffle=Tr
         batch_size: 每个批次的样本数
         shuffle: 是否打乱数据
         verbose: 是否打印详细信息
+        num_workers: 数据加载的线程数，默认为4
+        pin_memory: 是否将数据固定在内存中以加速GPU传输，默认为True
         
     Returns:
         List[DataLoader]: 每个客户端的数据加载器列表
@@ -146,7 +64,7 @@ def create_client_dataloaders(train_dataset, num_clients, batch_size, shuffle=Tr
     client_train_size = total_train_size // num_clients
     
     if verbose:
-        print(f"\n为{num_clients}个客户端分配数据集...")
+        info(f"\n为{num_clients}个客户端分配数据集...")
         
     # 为每个客户端创建数据加载器
     for i in range(num_clients):
@@ -154,22 +72,15 @@ def create_client_dataloaders(train_dataset, num_clients, batch_size, shuffle=Tr
         client_indices = torch.randperm(total_train_size)[:client_train_size]
         client_dataset = torch.utils.data.Subset(train_dataset, client_indices)
         client_loader = torch.utils.data.DataLoader(
-            client_dataset, batch_size=batch_size, shuffle=shuffle)
+            client_dataset, batch_size=batch_size, shuffle=shuffle,
+            num_workers=num_workers, pin_memory=pin_memory)
         client_dataloaders.append(client_loader)
         
         if verbose:
-            print(f"客户端 {i+1} 数据准备完成，样本数: {len(client_dataset)}")
+            info(f"客户端 {i+1} 数据准备完成，样本数: {len(client_dataset)}")
     
     return client_dataloaders
 
 
 if __name__ == '__main__':
-    save_data(get_mnist())
-    dataset = load_data()
-    get_dataset_details(dataset)
-    print("data_split.py test")
-    for n, d in enumerate(split_dataset(dataset, 2)):
-        save_data(d, "federated_data_" + str(n) + ".d")
-        dk = load_data("federated_data_" + str(n) + ".d")
-        get_dataset_details(dk)
-        print()
+    pass

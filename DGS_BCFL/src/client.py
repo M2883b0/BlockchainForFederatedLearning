@@ -6,10 +6,12 @@ import torch
 from torch import nn
 from torch.utils.data import DataLoader
 import threading
+import time
 
 from .FederatedLearning import Validator
 from .FederatedLearning.aggregator import Aggregator
 from .FederatedLearning.learner import FederatedLearner, CNNModel
+from .utils.logger import setup_logger, info, debug, warning, error
 
 # main_dict = {
 #     "role": [
@@ -38,7 +40,7 @@ if not os.path.exists("./client_gradients"):
 
 
 class Client:
-    def __init__(self, epochs: int, client_name: str, data_loader: DataLoader, ModelClass, main_dict: dict, base_path: str = "."):
+    def __init__(self, epochs: int, client_name: str, data_loader: DataLoader, ModelClass, main_dict: dict, test_loader: DataLoader, base_path: str = "."):
         """
         初始化客户端
         
@@ -53,6 +55,7 @@ class Client:
         self.round = 0
         self.name = client_name
         self.data_loader = data_loader
+        self.test_loader = test_loader
         self.main_dict = main_dict
         self.global_model = ModelClass()
         self.base_path = base_path
@@ -65,7 +68,7 @@ class Client:
             str: 角色名称
         """
         self.role = self.main_dict["role"][-1][self.name]
-        print(f"[{self.name}] 当前轮次角色: {self.role}")
+        info(f"[{self.name}] 当前轮次角色: {self.role}")
         return self.role
 
     def get_role_nums(self):
@@ -76,7 +79,7 @@ class Client:
             int: 角色数量
         """
         role_dict = self.main_dict["role"][self.round]
-        roles_li = role_dict.items()
+        roles_li = list(role_dict.values())
         return roles_li.count("learner"), roles_li.count("validator")
 
     def load_gradient(self, gradient_path):
@@ -115,6 +118,9 @@ class Client:
         运行客户端，根据每轮的角色执行相应的任务
         """
         # 获取当前轮次的角色
+        # 等待角色分配
+        while self.round + 1 == len(self.main_dict["role"]):
+            time.sleep(0.5)
         current_role = self.get_role()
         if current_role == "aggregator":
             # 聚合者角色
@@ -130,9 +136,9 @@ class Client:
         else:
             raise ValueError(f"无效的客户端角色: {current_role}")
 
-        print(f"[{self.name}] {current_role}结束第{self.round + 1}轮任务")
+        info(f"[{self.name}] {current_role}结束第{self.round + 1}轮任务")
         self.round += 1
-        print("=" * 70)
+        info("=" * 70)
 
     def _run_as_aggregator(self):
         """
@@ -143,7 +149,7 @@ class Client:
         # 创建聚合器实例
         aggregator = Aggregator(self.global_model)
         
-        print(f"[{self.name}] 聚合者开始收集梯度...")
+        info(f"[{self.name}] 聚合者开始收集梯度...")
         # 获取投票和梯度列表，等待所有客户端开始梯度计算, 验证者开始投票
         while True:
             cg_list = self.main_dict["client_gradients"]
@@ -152,32 +158,41 @@ class Client:
                 client_gradients = cg_list[self.round]
                 votes = votes_list[self.round]
                 break
+            # 添加短暂休眠以减少CPU占用
+            time.sleep(0.1)
         # 获取训练者数量
         learner_nums ,validator_nums = self.get_role_nums()
         # 等待所有客户端完成梯度计算，验证者完成投票
         while True:
             if len(client_gradients) == learner_nums and len(votes) == validator_nums * learner_nums:
                 break
+            # 添加短暂休眠以减少CPU占用
+            time.sleep(0.1)
+        # print(self.main_dict)
         for client_sign, gradient_path in client_gradients:
-            vote_of_client = [i[1] for i in votes if i[0] == client_sign]
+            vote_of_client = [i[2] for i in votes if i[0] == client_sign]
+            # print(vote_of_client)
             if vote_of_client.count(True) > validator_nums // 2:
                 self.main_dict["contribution"][client_sign] = 1
                 gradient = self.load_gradient(gradient_path)
                 aggregator.collect_gradients(gradient)
+            else:
+                info(f"[{self.name}] :客户端 {client_sign}的梯度被拒绝！")
         # 执行梯度聚合
-        print(f"[{self.name}] 开始聚合梯度...")
+        info(f"[{self.name}] 开始聚合梯度...")
         aggregated_gradients = aggregator.aggregate()
 
         # 更新全局模型
-        print(f"[{self.name}] 开始更新全局模型...")
+        info(f"[{self.name}] 开始更新全局模型...")
         aggregator.update_global_model(aggregated_gradients)
 
         # 更新本地保存的全局模型
         self.global_model = aggregator.global_model
         path = self.save_global_model(self.base_path + "/global_model")
         self.main_dict["global_model"].append(path)
-        print(f"[{self.name}] 全局模型更新完成！")
-
+        info(f"[{self.name}] 全局模型更新完成！")
+        result = aggregator.evaluate_model(self.test_loader)
+        info(f"[{self.name}] 测试集准确率: {result['accuracy']:.2f}%")
 
     def _run_as_learner(self):
         """
@@ -193,24 +208,24 @@ class Client:
         learner = FederatedLearner(self.global_model, self.data_loader, epochs=self.epochs)
         
         # 执行本地训练
-        print(f"[{self.name}] 学习者开始本地训练...")
+        info(f"[{self.name}] 学习者开始本地训练...")
         train_results = learner.train()
         
-        print(f"[{self.name}] 训练完成！损失: {train_results['loss']:.4f}, 准确率: {train_results['accuracy']:.2f}%")
+        info(f"[{self.name}] 训练完成！损失: {train_results['loss']:.4f}, 准确率: {train_results['accuracy']:.2f}%")
         
         # 导出梯度
         gradient = learner.export_gradients()
         gradient_path = self.save_gradient(gradient, self.base_path + "/client_gradients")
         if not self.main_dict["client_gradients"]:
-            self.main_dict["client_gradients"] = [(self.sign(gradient), gradient_path)]
+            self.main_dict["client_gradients"] = [[(self.sign(gradient), gradient_path)]]
         elif len(self.main_dict["client_gradients"]) == self.round:
             self.main_dict["client_gradients"].append([(self.sign(gradient), gradient_path)])
         elif len(self.main_dict["client_gradients"]) == self.round + 1:
             self.main_dict["client_gradients"][self.round].append((self.sign(gradient), gradient_path))
         else:
-            print(f"[{self.name}] 梯度列表长度错误！")
+            error(f"[{self.name}] 梯度列表长度错误！")
             raise ValueError("无效的梯度列表长度")
-        print(f"[{self.name}] 梯度导出完成！")
+        info(f"[{self.name}] 梯度导出完成！")
 
     def _run_as_validator(self):
         """
@@ -219,20 +234,24 @@ class Client:
         # 获取全局模型
         self.get_global_model()
         
-        print(f"[{self.name}] 验证者开始验证模型...")
+        info(f"[{self.name}] 验证者初始化...")
         
         # 创建验证器实例
         # 评估当前全局模型
         validator = Validator()
         validator.load_global_model(self.global_model)
-        validator.set_test_loader(self.data_loader)
+        validator.set_test_loader(self.test_loader)
         base_performance = validator.calculate_base_performance()
+        info(f"[{self.name}] 当前全局模型 精度: {base_performance['accuracy']:.2f}% 损失: {base_performance['loss']:.4f}")
         # 等待训练者开始训练
         while True:
             cg_list = self.main_dict["client_gradients"]
             if cg_list and len(self.main_dict["client_gradients"]) == self.round + 1:
                 client_gradients = cg_list[self.round]
                 break
+            # 添加短暂休眠以减少CPU占用
+            time.sleep(0.5)
+        info(f"[{self.name}] 验证者开始验证模型...")
         count = 0
         learner_nums, validator_nums = self.get_role_nums()
         while count < learner_nums:
@@ -242,19 +261,21 @@ class Client:
                 valid_result = validator.apply_gradients_and_validate_performance(gradient)
                 if not self.verify(gradient_sign, gradient):
                     result = (gradient_sign, self.sign({gradient_sign: False}), False)
+                    info(f"[{self.name}] 客户端签名，{gradient_sign}不合法，拒绝接受梯度")
                 elif valid_result.get("is_acceptable"):
                     result = (gradient_sign, self.sign({gradient_sign: True}), True)
+                    info(f"[{self.name}] 验证者接受客户端{gradient_sign}的梯度, 梯度提升{valid_result['accuracy_change']}")
                 else:
-                    print("精度下降过多: ", valid_result)
+                    warning("精度下降过多: ", valid_result)
                     result = (gradient_sign, self.sign({gradient_sign: False}), False)
                 if not self.main_dict["votes"]:
-                    self.main_dict["votes"].append([result])
+                    self.main_dict["votes"].append([[result]])
                 elif len(self.main_dict["votes"]) == self.round:
                     self.main_dict["votes"].append([result])
                 elif len(self.main_dict["votes"]) == self.round + 1:
                     self.main_dict["votes"][self.round].append(result)
                 else:
-                    print("投票列表长度错误")
+                    error("投票列表长度错误")
                     raise ValueError("无效的投票列表")
                 count += 1
-                print(f"[{self.name}] 验证者对客户端{gradient_sign}的签名进行验证结果: {result}")
+                info(f"[{self.name}] 验证者对客户端{gradient_sign}的签名进行验证结果: {result}")

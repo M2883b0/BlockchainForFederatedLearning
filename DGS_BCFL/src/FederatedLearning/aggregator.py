@@ -18,6 +18,7 @@ import torch
 import numpy as np
 from typing import Dict, List, Any, Optional, Tuple
 import time
+from DGS_BCFL.src.utils.logger import setup_logger, info, debug, warning, error
 
 
 class Aggregator:
@@ -25,7 +26,7 @@ class Aggregator:
     联邦学习聚合器类，负责收集、验证和聚合客户端的梯度更新
     """
     
-    def __init__(self, global_model: torch.nn.Module, learning_rate: float = 0.01,
+    def __init__(self, global_model: torch.nn.Module, learning_rate: float = 1,
                  gradient_threshold: float = None, max_gradients: int = None,
                  device: str = None, test_loader: Optional[torch.utils.data.DataLoader] = None):
         """
@@ -45,7 +46,7 @@ class Aggregator:
         else:
             self.device = torch.device(device)
         
-        print(f"Aggregator使用设备: {self.device}")
+        info(f"Aggregator使用设备: {self.device}")
         
         self.global_model = global_model.to(self.device)
         self.learning_rate = learning_rate
@@ -85,7 +86,7 @@ class Aggregator:
                         print(f"警告：梯度 '{param_name}' 的范数 {grad_norm:.2f} 超过阈值 {self.gradient_threshold}")
                         return False
             except Exception as e:
-                print(f"警告：检查梯度范数时出错: {e}")
+                warning(f"检查梯度范数时出错: {e}")
         
         # 收集梯度和权重
         self.collected_gradients.append({k: v.to(self.device) for k, v in gradients.items()})
@@ -105,10 +106,11 @@ class Aggregator:
             Dict[str, torch.Tensor]: 聚合后的梯度
         """
         if not self.collected_gradients:
+
             print("警告：没有可聚合的梯度")
             return {}
         
-        print(f"\n开始聚合{len(self.collected_gradients)}个客户端的梯度...")
+        info(f"\n开始聚合{len(self.collected_gradients)}个客户端的梯度...")
         aggregation_start_time = time.time()
         
         # 根据策略选择是否使用权重
@@ -121,8 +123,8 @@ class Aggregator:
         aggregated_gradients = self._aggregate_gradients(self.collected_gradients, weights)
         
         aggregation_time = time.time() - aggregation_start_time
-        print(f"梯度聚合完成! 耗时: {aggregation_time:.2f}秒")
-        print(f"聚合后的梯度参数数量: {len(aggregated_gradients)}")
+        info(f"梯度聚合完成! 耗时: {aggregation_time:.2f}秒")
+        info(f"聚合后的梯度参数数量: {len(aggregated_gradients)}")
         
         # 重置收集的梯度（如果需要）
         if reset_after:
@@ -184,7 +186,7 @@ class Aggregator:
         # 使用指定的学习率或默认学习率
         lr = learning_rate if learning_rate is not None else self.learning_rate
         
-        print("更新全局模型...")
+        info("更新全局模型...")
         update_start_time = time.time()
         
         # 应用梯度更新模型参数
@@ -194,7 +196,7 @@ class Aggregator:
                     param.data += lr * gradients[name]
         
         update_time = time.time() - update_start_time
-        print(f"全局模型更新完成! 耗时: {update_time:.2f}秒")
+        info(f"全局模型更新完成! 耗时: {update_time:.2f}秒")
     
     def reset_collected_gradients(self) -> None:
         """
@@ -370,34 +372,34 @@ if __name__ == '__main__':
         clients = create_test_clients(global_model, train_loader, num_clients=3)
         
         # 模拟一轮联邦学习
-        print("\n===== 开始模拟联邦学习过程 =====")
+        info("\n===== 开始模拟联邦学习过程 =====")
         
         # 客户端训练并提交梯度
         for i, client in enumerate(clients):
-            print(f"\n客户端 {i+1} 开始训练...")
+            info(f"\n客户端 {i+1} 开始训练...")
             # 客户端加载全局模型
             client.load_global_model(global_model)
             # 客户端训练
             train_result = client.train()
-            print(f"客户端 {i+1} 训练完成: 损失={train_result['loss']:.4f}, 准确率={train_result['accuracy']:.2f}%")
+            info(f"客户端 {i+1} 训练完成: 损失={train_result['loss']:.4f}, 准确率={train_result['accuracy']:.2f}%")
             # 客户端导出梯度
             gradients = client.export_gradients()
             # 聚合器收集梯度
             success = aggregator.collect_gradients(gradients, weight=1.0)
-            print(f"客户端 {i+1} 梯度收集{'成功' if success else '失败'}")
+            info(f"客户端 {i+1} 梯度收集{'成功' if success else '失败'}")
         
         # 聚合梯度
-        print("\n开始聚合梯度...")
+        info("\n开始聚合梯度...")
         aggregated_gradients = aggregator.aggregate(strategy='average')
         
         # 更新全局模型
-        print("\n更新全局模型...")
+        info("\n更新全局模型...")
         aggregator.update_global_model(aggregated_gradients)
         
         # 评估更新后的模型
-        print("\n评估更新后的全局模型...")
+        info("\n评估更新后的全局模型...")
         performance = aggregator.evaluate_model(test_loader)
-        print(f"全局模型性能: 损失={performance['loss']:.4f}, 准确率={performance['accuracy']:.2f}%")
+        info(f"全局模型性能: 损失={performance['loss']:.4f}, 准确率={performance['accuracy']:.2f}%")
         
     # 运行测试
     if __name__ == '__main__':

@@ -4,15 +4,12 @@
 # @Author :M2883b0
 
 import torch
-import torchvision
-import torchvision.transforms as transforms
-from torch.utils.data import DataLoader
-from queue import Queue
 
-from DGS_BCFL.src.FederatedLearning.learner import FederatedLearner, CNNModel
-from DGS_BCFL.src.client import Client
 from DGS_BCFL.src import data_split
-
+from DGS_BCFL.src.FederatedLearning.learner import CNNModel
+from DGS_BCFL.src.client import Client
+from DGS_BCFL.src.utils.logger import info
+from DGS_BCFL.src.owner import Owner
 
 if __name__ == '__main__':
     """
@@ -26,50 +23,36 @@ if __name__ == '__main__':
     aggregators_num = 1
     validators_num = 3
     learners_num = 6
+    # 联邦学习轮数
+    max_round = 2
+    # 模型类
+    model_class = CNNModel
 
-    dataset = data_split.get_mnist()
-    client_dataloaders = data_split.create_client_dataloaders(dataset["train_images"], 5, 64) * 2
-    print(type(client_dataloaders[0]))
-    main_dict = {
-      "role": [{}],
-      "global_model": [],
-      "client_gradients":[],
-      "votes": [],
-      "contribution": {}
-    }
+    # 使用data_split模块中的函数获取PyTorch数据集
+    train_dataset = data_split.get_mnist_pytorch_dataset(train=True)
+    test_dataset = data_split.get_mnist_pytorch_dataset(train=False)
+    # test
+    # 使用正确的数据集对象创建数据加载器
+    client_dataloaders = data_split.create_client_dataloaders(train_dataset, 5, 64) * 2
+    # client_dataloaders = data_split.create_client_dataloaders(train_dataset, 10, 64)
+    client_test_loader = data_split.create_client_dataloaders(test_dataset, 5, 64) * 2
+
+    # 初始化管理者，并获得初始化字典
+    owner = Owner(rotation_cycle=1, model_class=model_class)
+    main_dict = owner.get_main_dict()
 
     # 初始化客户端以及身份
-    clients = []
+    clients = [owner]
     role_dict = main_dict["role"][0]
     for i in range(clients_num):
         client_name = f"client_{i+1}"
-        client = Client(epochs=5, client_name=client_name, data_loader=client_dataloaders[i], ModelClass=CNNModel, main_dict=main_dict)
-        main_dict["contribution"][client_name] = 0
-        if aggregators_num > 0:
-            role_dict[client_name] = "aggregator"
-            aggregators_num -= 1
-        elif validators_num > 0:
-            role_dict[client_name] = "validator"
-            validators_num -= 1
-        else:
-            role_dict[client_name] = "learner"
-            learners_num -= 1
+        client = Client(epochs=2, client_name=client_name, data_loader=client_dataloaders[i], test_loader=client_test_loader[i], ModelClass=model_class, main_dict=main_dict)
+        owner.join(client_name)
         clients.append(client)
 
-    # 创建目录
-    import os
-    if not os.path.exists("./global_model"):
-        os.mkdir("./global_model")
-    if not os.path.exists("./client_gradients"):
-        os.mkdir("./client_gradients")
-    # 初始化全局模型
-    init_global_model = CNNModel()
-    path = "./global_model/init_global_model"
-    torch.save(init_global_model.state_dict(), path)
-    main_dict["global_model"].append(path)
-    print(f"已保存初始全局模型到 {path}")
-    print(f"main_dict is {main_dict}")
+
     import threading
-    t = [threading.Thread(target=client.run) for client in clients]
-    _ = [i.start() for i in t]
-    _ = [i.join for i in t]
+    for _ in range(max_round):
+        t = [threading.Thread(target=client.run) for client in clients]
+        _ = [i.start() for i in t]
+        _ = [i.join() for i in t]

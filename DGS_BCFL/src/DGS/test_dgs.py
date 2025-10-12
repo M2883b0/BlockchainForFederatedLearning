@@ -17,6 +17,7 @@
 import unittest
 import numpy as np
 from . import DynamicGroupSignature, LatticeParameters
+from ..utils.logger import setup_logger, info, debug, warning, error
 
 
 class TestDynamicGroupSignature(unittest.TestCase):
@@ -228,9 +229,9 @@ class TestDynamicGroupSignature(unittest.TestCase):
             perf_dgs.verify(self.test_messages[0], signature)
         verify_time = time.time() - start_time
         
-        print(f"\n性能测试结果:")
-        print(f"10个签名生成时间: {sign_time:.4f}秒")
-        print(f"10个签名验证时间: {verify_time:.4f}秒")
+        info(f"\n性能测试结果:")
+        info(f"10个签名生成时间: {sign_time:.4f}秒")
+        info(f"10个签名验证时间: {verify_time:.4f}秒")
     
 
 if __name__ == '__main__':
