@@ -8,10 +8,10 @@ from torch.utils.data import DataLoader
 import threading
 import time
 
-from .FederatedLearning import Validator
-from .FederatedLearning.aggregator import Aggregator
-from .FederatedLearning.learner import FederatedLearner, CNNModel
-from .utils.logger import setup_logger, info, debug, warning, error
+from FederatedLearning import Validator
+from FederatedLearning.aggregator import Aggregator
+from FederatedLearning.learner import FederatedLearner, CNNModel
+from utils.logger import setup_logger, info, debug, warning, error
 
 # main_dict = {
 #     "role": [
@@ -120,6 +120,7 @@ class Client:
         # 获取当前轮次的角色
         # 等待角色分配
         while self.round + 1 == len(self.main_dict["role"]):
+            info(f"[{self.name}] 等待角色分配...")
             time.sleep(0.5)
         current_role = self.get_role()
         if current_role == "aggregator":

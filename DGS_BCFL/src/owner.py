@@ -82,6 +82,7 @@ class Owner:
         """
         运行
         """
+        self.assign_roles()
         while True:
             if self.round + 1 == len(self.main_dict["global_model"]):
                 break

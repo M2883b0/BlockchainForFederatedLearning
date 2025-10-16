@@ -32,7 +32,6 @@ if __name__ == '__main__':
 
     # 初始化客户端以及身份
     clients = [owner]
-    role_dict = main_dict["role"][0]
     for i in range(clients_num):
         client_name = f"client_{i+1}"
         client = Client(epochs=2, client_name=client_name, data_loader=client_dataloaders[i], test_loader=client_test_loader[i], ModelClass=model_class, main_dict=main_dict)
