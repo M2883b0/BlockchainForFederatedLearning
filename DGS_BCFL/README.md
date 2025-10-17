@@ -18,6 +18,8 @@ main_dict = {
   ],
   "contribution": {
     "client_1": 0.5
-  }
+  },
+  "global_accuracy_history": [],
+  "contribution_history": []
 }
 ```

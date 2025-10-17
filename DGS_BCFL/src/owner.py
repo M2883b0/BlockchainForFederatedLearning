@@ -83,9 +83,11 @@ class Owner:
         运行
         """
         self.assign_roles()
+        print(f"main_dict is {self.main_dict}")
         while True:
             if self.round + 1 == len(self.main_dict["global_model"]):
                 break
+            print(f"等待第{self.round + 1}模型聚合中...")
             time.sleep(0.5)
         # 分配激励
         self.distribute_incentives()
@@ -94,6 +96,7 @@ class Owner:
             self.assign_roles()
         else:
             self.main_dict["role"].append(self.main_dict["role"][-1])
+        self.round += 1
 
 
 if __name__ == "__main__":
