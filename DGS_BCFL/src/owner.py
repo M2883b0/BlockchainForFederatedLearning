@@ -5,6 +5,7 @@
 import time
 from threading import Lock
 import torch
+from utils.logger import info
 
 
 class Owner:
@@ -18,7 +19,9 @@ class Owner:
             "global_model": [],
             "client_gradients": [],
             "votes": [],
-            "contribution": {}
+            "contribution": {},
+            "global_accuracy_history": [],
+            "contribution_history": []
         }
         self.round = 0
         self.rotation_cycle = rotation_cycle
@@ -82,12 +85,15 @@ class Owner:
         """
         运行
         """
-        self.assign_roles()
-        print(f"main_dict is {self.main_dict}")
+        if self.round == 0:
+            info(f"Owner开始初始化 角色")
+            self.assign_roles()
+            info(f"初始化完成 {self.main_dict}")
+        if self.round == 0 and self.main_dict["contribution_history"] == []:
+            self.main_dict["contribution_history"].append(self.main_dict["contribution"])
         while True:
-            if self.round + 1 == len(self.main_dict["global_model"]):
+            if self.round + 2 == len(self.main_dict["global_model"]):
                 break
-            print(f"等待第{self.round + 1}模型聚合中...")
             time.sleep(0.5)
         # 分配激励
         self.distribute_incentives()
@@ -97,7 +103,8 @@ class Owner:
         else:
             self.main_dict["role"].append(self.main_dict["role"][-1])
         self.round += 1
-
+        self.main_dict["contribution_history"].append(self.main_dict["contribution"])
+        info(f"Owner运行完成 {self.main_dict}")
 
 if __name__ == "__main__":
     pass

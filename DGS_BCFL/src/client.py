@@ -119,8 +119,8 @@ class Client:
         """
         # 获取当前轮次的角色
         # 等待角色分配
-        while self.round + 1 == len(self.main_dict["role"]):
-            info(f"[{self.name}] 等待角色分配...")
+        while self.round + 1 != len(self.main_dict["role"]):
+            info(f"[{self.name}]  round {self.round + 1} 等待角色分配...")
             time.sleep(0.5)
         current_role = self.get_role()
         if current_role == "aggregator":
@@ -149,7 +149,12 @@ class Client:
         self.get_global_model()
         # 创建聚合器实例
         aggregator = Aggregator(self.global_model)
-        
+        if self.round == 0 and self.main_dict["global_accuracy_history"] == []:
+            # 评估初始模型
+            result = aggregator.evaluate_model(self.test_loader)
+            # 保存数据
+            self.main_dict["global_accuracy_history"].append((result["accuracy"]))
+
         info(f"[{self.name}] 聚合者开始收集梯度...")
         # 获取投票和梯度列表，等待所有客户端开始梯度计算, 验证者开始投票
         while True:
@@ -160,7 +165,7 @@ class Client:
                 votes = votes_list[self.round]
                 break
             # 添加短暂休眠以减少CPU占用
-            time.sleep(0.1)
+            time.sleep(0.2)
         # 获取训练者数量
         learner_nums ,validator_nums = self.get_role_nums()
         # 等待所有客户端完成梯度计算，验证者完成投票
@@ -168,7 +173,7 @@ class Client:
             if len(client_gradients) == learner_nums and len(votes) == validator_nums * learner_nums:
                 break
             # 添加短暂休眠以减少CPU占用
-            time.sleep(0.1)
+            time.sleep(0.2)
         # print(self.main_dict)
         for client_sign, gradient_path in client_gradients:
             vote_of_client = [i[2] for i in votes if i[0] == client_sign]
@@ -194,6 +199,8 @@ class Client:
         info(f"[{self.name}] 全局模型更新完成！")
         result = aggregator.evaluate_model(self.test_loader)
         info(f"[{self.name}] 测试集准确率: {result['accuracy']:.2f}%")
+        # 保存数据
+        self.main_dict["global_accuracy_history"].append((result["accuracy"]))
 
     def _run_as_learner(self):
         """

@@ -64,7 +64,7 @@ def create_client_dataloaders(train_dataset, num_clients, batch_size, shuffle=Tr
     client_train_size = total_train_size // num_clients
     
     if verbose:
-        info(f"\n为{num_clients}个客户端分配数据集...")
+        info(f"\n切分{num_clients}份数据集...")
         
     # 为每个客户端创建数据加载器
     for i in range(num_clients):
@@ -77,7 +77,7 @@ def create_client_dataloaders(train_dataset, num_clients, batch_size, shuffle=Tr
         client_dataloaders.append(client_loader)
         
         if verbose:
-            info(f"客户端 {i+1} 数据准备完成，样本数: {len(client_dataset)}")
+            info(f" {i+1} 数据准备完成，样本数: {len(client_dataset)}")
     
     return client_dataloaders
 
