@@ -94,7 +94,8 @@ class Owner:
         while True:
             if self.round + 2 == len(self.main_dict["global_model"]):
                 break
-            time.sleep(0.5)
+            time.sleep(1)
+            # info(f"Owner time To print main_dict {self.main_dict}")
         # 分配激励
         self.distribute_incentives()
         # 每隔一定轮数，重新分配角色

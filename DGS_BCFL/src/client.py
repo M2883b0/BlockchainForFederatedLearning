@@ -3,6 +3,7 @@
 # @Time :2025/10/9 14:32
 # @Author :M2883b0
 import torch
+from IPython.core.logger import Logger
 from torch import nn
 from torch.utils.data import DataLoader
 import threading
@@ -59,6 +60,7 @@ class Client:
         self.main_dict = main_dict
         self.global_model = ModelClass()
         self.base_path = base_path
+        self.lock = threading.Lock()
 
     def get_role(self):
         """
@@ -129,8 +131,6 @@ class Client:
         elif current_role == "learner":
             # 学习者角色
             self._run_as_learner()
-            # 模拟将梯度发送给聚合者（在实际应用中可能通过网络或区块链传输）
-            # self._send_gradients(gradients)
         elif current_role == "validator":
             # 验证者角色
             self._run_as_validator()
@@ -195,12 +195,14 @@ class Client:
         # 更新本地保存的全局模型
         self.global_model = aggregator.global_model
         path = self.save_global_model(self.base_path + "/global_model")
-        self.main_dict["global_model"].append(path)
+
         info(f"[{self.name}] 全局模型更新完成！")
         result = aggregator.evaluate_model(self.test_loader)
         info(f"[{self.name}] 测试集准确率: {result['accuracy']:.2f}%")
-        # 保存数据
-        self.main_dict["global_accuracy_history"].append((result["accuracy"]))
+        with self.lock:
+            # 保存数据
+            self.main_dict["global_model"].append(path)
+            self.main_dict["global_accuracy_history"].append((result["accuracy"]))
 
     def _run_as_learner(self):
         """
@@ -224,15 +226,16 @@ class Client:
         # 导出梯度
         gradient = learner.export_gradients()
         gradient_path = self.save_gradient(gradient, self.base_path + "/client_gradients")
-        if not self.main_dict["client_gradients"]:
-            self.main_dict["client_gradients"] = [[(self.sign(gradient), gradient_path)]]
-        elif len(self.main_dict["client_gradients"]) == self.round:
-            self.main_dict["client_gradients"].append([(self.sign(gradient), gradient_path)])
-        elif len(self.main_dict["client_gradients"]) == self.round + 1:
-            self.main_dict["client_gradients"][self.round].append((self.sign(gradient), gradient_path))
-        else:
-            error(f"[{self.name}] 梯度列表长度错误！")
-            raise ValueError("无效的梯度列表长度")
+        with self.lock:
+            if not self.main_dict["client_gradients"]:
+                self.main_dict["client_gradients"] = [[(self.sign(gradient), gradient_path)]]
+            elif len(self.main_dict["client_gradients"]) == self.round:
+                self.main_dict["client_gradients"].append([(self.sign(gradient), gradient_path)])
+            elif len(self.main_dict["client_gradients"]) == self.round + 1:
+                self.main_dict["client_gradients"][self.round].append((self.sign(gradient), gradient_path))
+            else:
+                error(f"[{self.name}] 梯度列表长度错误！")
+                raise ValueError("无效的梯度列表长度")
         info(f"[{self.name}] 梯度导出完成！")
 
     def _run_as_validator(self):
@@ -253,20 +256,27 @@ class Client:
         info(f"[{self.name}] 当前全局模型 精度: {base_performance['accuracy']:.2f}% 损失: {base_performance['loss']:.4f}")
         # 等待训练者开始训练
         while True:
+            # 添加短暂休眠以减少CPU占用
+            time.sleep(1)
             cg_list = self.main_dict["client_gradients"]
             if cg_list and len(self.main_dict["client_gradients"]) == self.round + 1:
                 client_gradients = cg_list[self.round]
                 break
-            # 添加短暂休眠以减少CPU占用
-            time.sleep(0.5)
-        info(f"[{self.name}] 验证者开始验证模型...")
+            else:
+                info(f"[{self.name}] 等待训练者提交梯度")
+
+
         count = 0
         learner_nums, validator_nums = self.get_role_nums()
+        info(f"[{self.name}] 验证者开始验证模型...")
         while count < learner_nums:
             if len(client_gradients) > count:
                 gradient_sign, gradient_path = client_gradients[count]
+                info(f"[{self.name}] 验证者开始验证客户端 {gradient_sign}的梯度, 梯度路径 {gradient_path}")
                 gradient = self.load_gradient(gradient_path)
+                info(f"[{self.name}] 验证者开始应用梯度...")
                 valid_result = validator.apply_gradients_and_validate_performance(gradient)
+                info(f"[{self.name}] 验证者完成验证, 验证结果: {valid_result}")
                 if not self.verify(gradient_sign, gradient):
                     result = (gradient_sign, self.sign({gradient_sign: False}), False)
                     info(f"[{self.name}] 客户端签名，{gradient_sign}不合法，拒绝接受梯度")
@@ -276,14 +286,14 @@ class Client:
                 else:
                     warning("精度下降过多: ", valid_result)
                     result = (gradient_sign, self.sign({gradient_sign: False}), False)
-                if not self.main_dict["votes"]:
-                    self.main_dict["votes"].append([[result]])
-                elif len(self.main_dict["votes"]) == self.round:
-                    self.main_dict["votes"].append([result])
-                elif len(self.main_dict["votes"]) == self.round + 1:
-                    self.main_dict["votes"][self.round].append(result)
-                else:
-                    error("投票列表长度错误")
-                    raise ValueError("无效的投票列表")
+                with self.lock:
+                    if not self.main_dict["votes"] or len(self.main_dict["votes"]) == self.round:
+                        self.main_dict["votes"].append([result])
+                    elif len(self.main_dict["votes"]) == self.round + 1:
+                        self.main_dict["votes"][self.round].append(result)
+                    else:
+                        error("投票列表长度错误")
+                        raise ValueError("无效的投票列表")
                 count += 1
                 info(f"[{self.name}] 验证者对客户端{gradient_sign}的签名进行验证结果: {result}")
+

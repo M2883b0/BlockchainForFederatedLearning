@@ -190,8 +190,8 @@ class FederatedLearner:
             total += epoch_total
 
             # 记录每轮训练结果
-            info(
-                f'客户端训练轮次 {epoch + 1}/{self.epochs}: 损失={epoch_loss / len(self.data_loader):.4f}, 准确率={100 * epoch_correct / epoch_total:.2f}%')
+            # info(
+                # f'客户端训练轮次 {epoch + 1}/{self.epochs}: 损失={epoch_loss / len(self.data_loader):.4f}, 准确率={100 * epoch_correct / epoch_total:.2f}%')
 
         # 计算平均损失和准确率
         avg_loss = total_loss / self.epochs

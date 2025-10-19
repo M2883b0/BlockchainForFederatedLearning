@@ -43,7 +43,7 @@ def get_mnist_pytorch_dataset(train=True, transform=None):
 
 
 # 创建客户端数据加载器
-def create_client_dataloaders(train_dataset, num_clients, batch_size, shuffle=True, verbose=True, num_workers=4, pin_memory=True):
+def create_client_dataloaders(train_dataset, num_clients, batch_size, shuffle=True, verbose=True, num_workers=0, pin_memory=True):
     """
     为联邦学习创建客户端数据加载器
     

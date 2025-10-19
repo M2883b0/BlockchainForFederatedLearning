@@ -18,7 +18,7 @@ if __name__ == '__main__':
     test_dataset = data_split.get_mnist_pytorch_dataset(train=False)
     # test
     # 使用正确的数据集对象创建数据加载器
-    client_dataloaders = data_split.create_client_dataloaders(train_dataset, clients_num // 2, 64) * 2
+    client_dataloaders = data_split.create_client_dataloaders(train_dataset, clients_num // 2, 64, num_workers=clients_num) * 2
     client_test_loader = data_split.create_client_dataloaders(test_dataset, clients_num // 2, 64) * 2
 
 

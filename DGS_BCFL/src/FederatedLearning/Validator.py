@@ -143,7 +143,6 @@ class Validator:
             raise ValueError('测试数据加载器未设置，请先调用set_test_loader方法')
         if self.base_performance is None:
             self.calculate_base_performance()
-
         # 创建模型副本用于测试梯度效果
         temp_model = copy.deepcopy(self.global_model)
 
@@ -155,22 +154,28 @@ class Validator:
 
         # 评估应用梯度后的模型性能
         temp_model.eval()
+        # 确保临时模型在正确设备上
+        temp_model = temp_model.to(self.device)
         criterion = torch.nn.CrossEntropyLoss()
         test_loss = 0.0
         correct = 0
         total = 0
-
         with torch.no_grad():
             for data, target in self.test_loader:
-                data, target = data.to(self.device), target.to(self.device)
+                # 使用非阻塞GPU拷贝以配合pin_memory提升吞吐
+                data = data.to(self.device, non_blocking=True)
+                target = target.to(self.device, non_blocking=True)
                 output = temp_model(data)
-                test_loss += criterion(output, target).item()
-                _, predicted = torch.max(output.data, 1)
-                total += target.size(0)
+                # 按样本数加权累计损失，避免批次大小差异导致的偏差
+                loss = criterion(output, target)
+                batch_size = target.size(0)
+                test_loss += loss.item() * batch_size
+                # 使用detach().argmax替代output.data
+                predicted = output.detach().argmax(dim=1)
+                total += batch_size
                 correct += (predicted == target).sum().item()
-
         new_performance = {
-            'loss': test_loss / len(self.test_loader),
+            'loss': test_loss / total,
             'accuracy': 100 * correct / total,
             'samples': total
         }
@@ -196,7 +201,6 @@ class Validator:
             is_performance_acceptable = False
             status = 'reject'
             reason = f'准确度下降 {abs(accuracy_change):.2f}%，超过容忍阈值 {self.performance_drop_threshold}%'
-
         result = {
             'is_acceptable': is_performance_acceptable,
             'status': status,
@@ -206,7 +210,6 @@ class Validator:
             'accuracy_change': accuracy_change,
             'loss_change': loss_change
         }
-
         # logger.info(f'性能验证结果: {status} - {reason}')
         return result
 
