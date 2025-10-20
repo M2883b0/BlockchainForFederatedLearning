@@ -88,7 +88,7 @@ class Owner:
         if self.round == 0:
             info(f"Owner开始初始化 角色")
             self.assign_roles()
-            info(f"初始化完成 {self.main_dict}")
+            # info(f"初始化完成 {self.main_dict}")
         if self.round == 0 and self.main_dict["contribution_history"] == []:
             self.main_dict["contribution_history"].append(self.main_dict["contribution"])
         while True:
@@ -105,7 +105,7 @@ class Owner:
             self.main_dict["role"].append(self.main_dict["role"][-1])
         self.round += 1
         self.main_dict["contribution_history"].append(self.main_dict["contribution"])
-        info(f"Owner运行完成 {self.main_dict}")
+        # info(f"Owner运行完成 {self.main_dict}")
 
 if __name__ == "__main__":
     pass
