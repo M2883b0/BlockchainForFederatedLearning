@@ -41,7 +41,7 @@ if not os.path.exists("./client_gradients"):
 
 
 class Client:
-    def __init__(self, epochs: int, client_name: str, data_loader: DataLoader, ModelClass, main_dict: dict, test_loader: DataLoader, base_path: str = "."):
+    def __init__(self, epochs: int, client_name: str, data_loader: DataLoader, ModelClass, main_dict: dict, test_loader: DataLoader, base_path: str = ".", learning_rate: float = 0.01):
         """
         初始化客户端
         
@@ -61,6 +61,7 @@ class Client:
         self.global_model = ModelClass()
         self.base_path = base_path
         self.lock = threading.Lock()
+        self.lr = learning_rate
 
     def get_role(self):
         """
@@ -215,7 +216,7 @@ class Client:
         self.get_global_model()
         
         # 创建学习者实例
-        learner = FederatedLearner(self.global_model, self.data_loader, epochs=self.epochs)
+        learner = FederatedLearner(self.global_model, self.data_loader, epochs=self.epochs, learning_rate=self.lr)
         
         # 执行本地训练
         info(f"[{self.name}] 学习者开始本地训练...")
