@@ -48,15 +48,28 @@ class Owner:
         加入客户端
         """
         self.main_dict["contribution"][client_name] = 0
+        self.main_dict["active_clients"].append(client_name)
 
     def distribute_incentives(self):
         """
         分发奖励
         """
-        # TODO
-        # 训练者奖励计算
-
         # 验证者奖励计算
+        r_v = 1
+        vote_len = len(self.main_dict["votes"][self.round])
+        S_v = 0
+        for _, _, data_len, _ in self.main_dict["client_gradients"][self.round]:
+            S_v += data_len
+        for i, ( _, validator, _, _, _)in enumerate(self.main_dict["votes"][self.round]):
+            self.main_dict[validator] += (vote_len -i) /vote_len * S_v * r_v
+            pass
+        # 训练者奖励计算
+        learner_incentives = 0
+        for client_name, contribution in self.main_dict["contribution"].items():
+            if self.main_dict["role"][self.round][client_name] == "learner":
+                learner_incentives += contribution
+
+
 
     def assign_roles(self):
         """

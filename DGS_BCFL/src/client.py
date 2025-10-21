@@ -176,7 +176,7 @@ class Client:
             # 添加短暂休眠以减少CPU占用
             time.sleep(0.2)
         # print(self.main_dict)
-        for client_sign, gradient_path in client_gradients:
+        for client_sign, gradient_path, _, _ in client_gradients:
             vote_of_client = [i[2] for i in votes if i[0] == client_sign]
             # print(vote_of_client)
             if vote_of_client.count(True) > validator_nums // 2:
@@ -227,13 +227,12 @@ class Client:
         # 导出梯度
         gradient = learner.export_gradients()
         gradient_path = self.save_gradient(gradient, self.base_path + "/client_gradients")
+        result = (self.sign(gradient), gradient_path, len(self.data_loader), self.epochs)
         with self.lock:
-            if not self.main_dict["client_gradients"]:
-                self.main_dict["client_gradients"] = [[(self.sign(gradient), gradient_path)]]
-            elif len(self.main_dict["client_gradients"]) == self.round:
-                self.main_dict["client_gradients"].append([(self.sign(gradient), gradient_path)])
+            if len(self.main_dict["client_gradients"]) == self.round:
+                self.main_dict["client_gradients"].append([result])
             elif len(self.main_dict["client_gradients"]) == self.round + 1:
-                self.main_dict["client_gradients"][self.round].append((self.sign(gradient), gradient_path))
+                self.main_dict["client_gradients"][self.round].append(result)
             else:
                 error(f"[{self.name}] 梯度列表长度错误！")
                 raise ValueError("无效的梯度列表长度")
@@ -272,7 +271,7 @@ class Client:
         info(f"[{self.name}] 验证者开始验证模型...")
         while count < learner_nums:
             if len(client_gradients) > count:
-                gradient_sign, gradient_path = client_gradients[count]
+                gradient_sign, gradient_path, data_len, epoches = client_gradients[count]
                 info(f"[{self.name}] 验证者开始验证客户端 {gradient_sign}的梯度, 梯度路径 {gradient_path}")
                 gradient = self.load_gradient(gradient_path)
                 info(f"[{self.name}] 验证者开始应用梯度...")
@@ -287,6 +286,7 @@ class Client:
                 else:
                     warning("精度下降过多: ", valid_result)
                     result = (gradient_sign, self.sign({gradient_sign: False}), False)
+                result += (data_len, epoches)
                 with self.lock:
                     if not self.main_dict["votes"] or len(self.main_dict["votes"]) == self.round:
                         self.main_dict["votes"].append([result])
