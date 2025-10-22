@@ -21,7 +21,9 @@ class Owner:
             "votes": [],
             "contribution": {},
             "global_accuracy_history": [],
-            "contribution_history": []
+            "contribution_history": [],
+            "active_clients": [],
+            "deactivate_clients": []
         }
         self.round = 0
         self.rotation_cycle = rotation_cycle
@@ -60,14 +62,26 @@ class Owner:
         S_v = 0
         for _, _, data_len, _ in self.main_dict["client_gradients"][self.round]:
             S_v += data_len
-        for i, ( _, validator, _, _, _)in enumerate(self.main_dict["votes"][self.round]):
-            self.main_dict[validator] += (vote_len -i) /vote_len * S_v * r_v
-            pass
+        for i, (_, validator, _, _, _)in enumerate(self.main_dict["votes"][self.round]):
+            self.main_dict["contribution"][validator] += (vote_len -i) /vote_len * S_v * r_v
         # 训练者奖励计算
-        learner_incentives = 0
-        for client_name, contribution in self.main_dict["contribution"].items():
-            if self.main_dict["role"][self.round][client_name] == "learner":
-                learner_incentives += contribution
+        r_l = 1
+        tao = 10
+        PT_dict = {client: 0.0 for client, role in self.main_dict["role"][self.round].items() if role == "learner"}
+        for learner, validator, flag, data_len,  epochs in self.main_dict["votes"][self.round]:
+            PT_dict[learner] += flag * self.main_dict["contribution"][validator]
+        sum_pt = sum(PT_dict.values())
+        for key in PT_dict:
+            PT_dict[key] = PT_dict[key] / sum_pt
+        for learner_sign, _, data_len, epochs in self.main_dict["client_gradients"][self.round]:
+            # 防止过度训练
+            if epochs > tao:
+                epochs = -(epochs - tao)
+            # 只对接受的梯度计算贡献
+            if PT_dict[learner_sign] >= 0.5:
+                self.main_dict["contribution"][learner_sign] += data_len * epochs * r_l
+            else:
+                self.main_dict["contribution"][learner_sign] += 0
 
 
 

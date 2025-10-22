@@ -136,7 +136,7 @@ class FederatedLearner:
         else:
             self.device = torch.device(device)
 
-        # info(f"FederatedLearner使用设备: {self.device}")
+        info(f"FederatedLearner使用设备: {self.device}")
         #
         self.model = copy.deepcopy(model).to(self.device)
         self.global_model = copy.deepcopy(model).to(self.device)
