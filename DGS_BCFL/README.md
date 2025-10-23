@@ -20,6 +20,7 @@ main_dict = {
     "client_1": 0.5
   },
   "active_clients": [],
+  " suspicious_clients": [],
   "deactivate_clients": [],
   "global_accuracy_history": [],
   "contribution_history": []

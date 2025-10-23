@@ -23,6 +23,7 @@ class Owner:
             "global_accuracy_history": [],
             "contribution_history": [],
             "active_clients": [],
+            "suspicious_clients": [],
             "deactivate_clients": []
         }
         self.round = 0
@@ -54,8 +55,9 @@ class Owner:
 
     def distribute_incentives(self):
         """
-        分发奖励
+        分发奖励, 并找出可疑客户端
         """
+        suspicious_clients = []
         # 验证者奖励计算
         r_v = 1
         vote_len = len(self.main_dict["votes"][self.round])
@@ -73,6 +75,8 @@ class Owner:
         sum_pt = sum(PT_dict.values())
         for key in PT_dict:
             PT_dict[key] = PT_dict[key] / sum_pt
+            if PT_dict[key] < 0.5:
+                suspicious_clients.append(key)
         for learner_sign, _, data_len, epochs in self.main_dict["client_gradients"][self.round]:
             # 防止过度训练
             if epochs > tao:
@@ -82,7 +86,11 @@ class Owner:
                 self.main_dict["contribution"][learner_sign] += data_len * epochs * r_l
             else:
                 self.main_dict["contribution"][learner_sign] += 0
-
+        for client in suspicious_clients:
+            if client in self.main_dict["suspicious_clients"]:
+                self.main_dict["active_clients"].remove(client)
+                self.main_dict["deactivate_clients"].append( client)
+        self.main_dict["suspicious_clients"] = suspicious_clients
 
 
     def assign_roles(self):

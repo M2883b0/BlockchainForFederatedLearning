@@ -4,6 +4,7 @@
 # @Author :M2883b0
 import torch
 from IPython.core.logger import Logger
+from sympy.vector import gradient
 from torch import nn
 from torch.utils.data import DataLoader
 import threading
@@ -377,21 +378,22 @@ class BadClient(Client):
         Returns:
             Dict[str, torch.Tensor]: 训练后的梯度
         """
-        # 获取全局模型
-        # self.global_model = self.init_model()
+        if self.round % 2 == 0:
+            # 获取全局模型
+            self.get_global_model()
 
-        # 创建学习者实例
-        # learner = FederatedLearner(self.global_model, self.data_loader, epochs=self.epochs, learning_rate=self.lr)
+            # 创建学习者实例
+            learner = FederatedLearner(self.global_model, self.data_loader, epochs=self.epochs, learning_rate=self.lr)
 
-        # 执行本地训练
-        info(f"[{self.name}] 学习者开始本地训练...")
-        # train_results = learner.train()
+            # 执行本地训练
+            info(f"[{self.name}] 学习者开始本地训练...")
+            train_results = learner.train()
 
-        info(f"[{self.name}] 训练完成！损失: ")#
-             # f"{train_results['loss']:.4f}, 准确率: {train_results['accuracy']:.2f}%")
-
-        # 导出梯度
-        gradient = self.init_model()
+            info(f"[{self.name}] 训练完成！损失: {train_results['loss']:.4f}, 准确率: {train_results['accuracy']:.2f}%")
+            gradient = learner.export_gradients()
+        else:
+            # 导出梯度
+            gradient = self.load_gradient( f"{self.base_path}/client_gradients/{self.name}_{self.round-1}_gradient.pt")
         gradient_path = self.save_gradient(gradient, self.base_path + "/client_gradients")
         result = (self.sign(gradient), gradient_path, len(self.data_loader), self.epochs)
         with self.lock:
