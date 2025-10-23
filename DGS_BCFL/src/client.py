@@ -298,3 +298,15 @@ class Client:
                 count += 1
                 info(f"[{self.name}] 验证者对客户端{gradient_sign}的签名进行验证结果: {result}")
 
+class BadClient(Client):
+    def __init__(self, epochs: int, client_name: str, data_loader: DataLoader, ModelClass, main_dict: dict, test_loader: DataLoader, base_path: str = ".", learning_rate: float = 0.01):
+        super().__init__(epochs, client_name, data_loader, ModelClass, main_dict, test_loader, base_path, learning_rate)
+    def _run_as_learner(self):
+        """
+        以学习者角色运行
+
+        Returns:
+            Dict[str, torch.Tensor]: 训练后的梯度
+        """
+    def run(self):
+        super().run()
