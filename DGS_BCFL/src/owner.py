@@ -78,9 +78,10 @@ class Owner:
                 num_learner += 1
         vote_len = len(self.main_dict["votes"][self.round])
         S_v = 0
-        r_v = 1 / vote_len
+        r_v = 0.01
         for _, _, data_len, _ in self.main_dict["client_gradients"][self.round]:
             S_v += data_len
+        S_v = S_v / num_learner
         for i, (_, validator, _, _, _)in enumerate(self.main_dict["votes"][self.round]):
             self.main_dict["contribution"][validator] += (vote_len -i) /vote_len * S_v * r_v
         # 训练者奖励计算

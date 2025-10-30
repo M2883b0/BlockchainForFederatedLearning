@@ -179,8 +179,7 @@ class Client:
                 break
             # 添加短暂休眠以减少CPU占用
             # time.sleep(0.2)
-            info(f"the main dict is {self.main_dict}")
-            time.sleep(10)
+            time.sleep(0.2)
         # print(self.main_dict)
         for client_sign, gradient_path, _, _ in client_gradients:
             vote_of_client = [i[2] for i in votes if i[0] == client_sign]

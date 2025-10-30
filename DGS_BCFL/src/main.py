@@ -2,6 +2,7 @@
 # @FileName :test_client.py
 # @Time :2025/10/9 20:25
 # @Author :M2883b0
+import time
 
 if __name__ == '__main__':
     from FederatedLearning.learner import CNNModel
@@ -19,9 +20,9 @@ if __name__ == '__main__':
     test_dataset = data_split.get_mnist_pytorch_dataset(train=False)
     # test
     # 使用正确的数据集对象创建数据加载器
-    client_dataloaders = data_split.create_client_dataloaders(train_dataset, clients_num, 64, num_workers=2)
+    client_dataloaders = data_split.create_client_dataloaders(train_dataset, clients_num, 64, num_workers=4)
     client_test_loader = data_split.create_client_dataloaders(test_dataset, clients_num, 64,)
-
+    start = time.time()
     # # 无恶意客户端
     # from owner import Owner
     # from client import Client, BadClient
@@ -52,7 +53,7 @@ if __name__ == '__main__':
     #
     # with open(f"main_dict_{clients_num}_{0}.pkl", "wb") as f:
     #     pickle.dump(main_dict, f)
-
+    print(f"无恶意客户端耗时{time.time() - start}")
     # 有恶意客户端
     from owner import Owner
     from client import Client, BadClient
@@ -94,3 +95,5 @@ if __name__ == '__main__':
 
     with open(f"main_dict_{clients_num}_{bad_percent * 100}.pkl", "wb") as f:
         pickle.dump(main_dict, f)
+
+    print(f"有恶意客户端耗时{time.time() - start}")
