@@ -42,7 +42,7 @@ if not os.path.exists("./client_gradients"):
 
 
 class Client:
-    def __init__(self, epochs: int, client_name: str, data_loader: DataLoader, ModelClass, main_dict: dict, test_loader: DataLoader, base_path: str = ".", learning_rate: float = 0.01):
+    def __init__(self, epochs: int, client_name: str, data_loader: DataLoader, ModelClass, main_dict: dict, lock: threading.Lock, test_loader: DataLoader, base_path: str = ".", learning_rate: float = 0.01):
         """
         初始化客户端
         
@@ -62,7 +62,7 @@ class Client:
         self.model_class = ModelClass
         self.global_model = ModelClass()
         self.base_path = base_path
-        self.lock = threading.Lock()
+        self.lock = lock
         self.lr = learning_rate
     def init_model(self):
         return self.model_class()
@@ -74,7 +74,7 @@ class Client:
         Returns:
             str: 角色名称
         """
-        self.role = self.main_dict["role"][-1][self.name]
+        self.role = self.main_dict["role"][-1].get(self.name, "")
         info(f"[{self.name}] 当前轮次角色: {self.role}")
         return self.role
 
@@ -128,7 +128,7 @@ class Client:
         # 等待角色分配
         while self.round + 1 != len(self.main_dict["role"]):
             info(f"[{self.name}]  round {self.round + 1} 等待角色分配...")
-            time.sleep(0.5)
+            time.sleep(1)
         current_role = self.get_role()
         if current_role == "aggregator":
             # 聚合者角色
@@ -140,7 +140,7 @@ class Client:
             # 验证者角色
             self._run_as_validator()
         else:
-            raise ValueError(f"无效的客户端角色: {current_role}")
+            info(f"客户端{self.name}角色被剔除训练，当前角色列表：{current_role}")
 
         info(f"[{self.name}] {current_role}结束第{self.round + 1}轮任务")
         self.round += 1
@@ -178,7 +178,9 @@ class Client:
             if len(client_gradients) == learner_nums and len(votes) == validator_nums * learner_nums:
                 break
             # 添加短暂休眠以减少CPU占用
-            time.sleep(0.2)
+            # time.sleep(0.2)
+            info(f"the main dict is {self.main_dict}")
+            time.sleep(10)
         # print(self.main_dict)
         for client_sign, gradient_path, _, _ in client_gradients:
             vote_of_client = [i[2] for i in votes if i[0] == client_sign]
@@ -208,6 +210,7 @@ class Client:
             # 保存数据
             self.main_dict["global_model"].append(path)
             self.main_dict["global_accuracy_history"].append((result["accuracy"]))
+        del aggregator
 
     def _run_as_learner(self):
         """
@@ -241,6 +244,7 @@ class Client:
                 error(f"[{self.name}] 梯度列表长度错误！")
                 raise ValueError("无效的梯度列表长度")
         info(f"[{self.name}] 梯度导出完成！")
+        del learner
 
     def _run_as_validator(self):
         """
@@ -268,6 +272,7 @@ class Client:
                 break
             else:
                 info(f"[{self.name}] 等待训练者提交梯度")
+
 
 
         count = 0
@@ -301,10 +306,11 @@ class Client:
                         raise ValueError("无效的投票列表")
                 count += 1
                 info(f"[{self.name}] 验证者对客户端{gradient_sign}的签名进行验证结果: {result}")
+        del validator
 
 class BadClient(Client):
-    def __init__(self, epochs: int, client_name: str, data_loader: DataLoader, ModelClass, main_dict: dict, test_loader: DataLoader, base_path: str = ".", learning_rate: float = 0.01):
-        super().__init__(epochs, client_name, data_loader, ModelClass, main_dict, test_loader, base_path, learning_rate)
+    def __init__(self, epochs: int, client_name: str, data_loader: DataLoader, ModelClass, main_dict: dict,lock: threading.Lock, test_loader: DataLoader, base_path: str = ".", learning_rate: float = 0.01):
+        super().__init__(epochs=epochs, client_name=client_name, data_loader=data_loader, ModelClass=ModelClass, main_dict=main_dict,lock=lock, test_loader=test_loader, base_path=base_path, learning_rate=learning_rate)
     def run(self):
         super().run()
 
@@ -360,7 +366,7 @@ class BadClient(Client):
         # aggregator.update_global_model(aggregated_gradients)
 
         # 更新本地保存的全局模型
-        self.global_model = aggregator.global_model
+        self.global_model = self.init_model()
         path = self.save_global_model(self.base_path + "/global_model")
 
         info(f"[{self.name}] 全局模型更新完成！")
@@ -370,6 +376,8 @@ class BadClient(Client):
             # 保存数据
             self.main_dict["global_model"].append(path)
             self.main_dict["global_accuracy_history"].append((result["accuracy"]))
+        del aggregator
+
 
     def _run_as_learner(self):
         """
@@ -391,6 +399,7 @@ class BadClient(Client):
 
             info(f"[{self.name}] 训练完成！损失: {train_results['loss']:.4f}, 准确率: {train_results['accuracy']:.2f}%")
             gradient = learner.export_gradients()
+            del learner
         else:
             # 导出梯度
             gradient = self.load_gradient( f"{self.base_path}/client_gradients/{self.name}_{self.round-1}_gradient.pt")
@@ -405,6 +414,7 @@ class BadClient(Client):
                 error(f"[{self.name}] 梯度列表长度错误！")
                 raise ValueError("无效的梯度列表长度")
         info(f"[{self.name}] 梯度导出完成！")
+
 
     def _run_as_validator(self):
         """
@@ -467,3 +477,5 @@ class BadClient(Client):
                         raise ValueError("无效的投票列表")
                 count += 1
                 info(f"[{self.name}] 验证者对客户端{gradient_sign}的签名进行验证结果: {result}")
+
+        del validator

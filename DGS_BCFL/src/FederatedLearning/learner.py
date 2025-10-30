@@ -157,7 +157,7 @@ class FederatedLearner:
         total_loss = 0.0
         correct = 0
         total = 0
-
+        info(f"开始训练客户端: {self.model.__class__.__name__}")
         for epoch in range(self.epochs):
             epoch_loss = 0.0
             epoch_correct = 0
@@ -184,6 +184,7 @@ class FederatedLearner:
                 epoch_total += target.size(0)
                 epoch_correct += (predicted == target).sum().item()
 
+            info(f"本地第{epoch + 1}轮次: 损失={loss.item():.4f}, 准确率={100 * predicted.eq(target).sum().item() / target.size(0):.2f}%")
             # 累计总损失和准确率
             total_loss += epoch_loss / len(self.data_loader)
             correct += epoch_correct

@@ -5,6 +5,9 @@
 import time
 from threading import Lock
 import torch
+from sympy.physics.units import action
+from triton.profiler import activate, deactivate
+
 from utils.logger import info
 
 
@@ -28,6 +31,7 @@ class Owner:
         }
         self.round = 0
         self.rotation_cycle = rotation_cycle
+
         # 创建目录
         import os
         if not os.path.exists("./global_model"):
@@ -39,12 +43,19 @@ class Owner:
         path = "./global_model/init_global_model"
         torch.save(init_global_model.state_dict(), path)
         self.main_dict["global_model"].append(path)
+        self.lock = Lock()
 
     def get_main_dict(self):
         """
         获取主字典
         """
         return self.main_dict
+
+    def get_lock(self):
+        """
+        获取锁
+        """
+        return self.lock
 
     def join(self, client_name: str):
         """
@@ -59,9 +70,15 @@ class Owner:
         """
         suspicious_clients = []
         # 验证者奖励计算
-        r_v = 1
+        num_validator = num_learner = 0
+        for client_name, role in self.main_dict["role"][self.round].items():
+            if role == "validator":
+                num_validator += 1
+            elif role == "learner":
+                num_learner += 1
         vote_len = len(self.main_dict["votes"][self.round])
         S_v = 0
+        r_v = 1 / vote_len
         for _, _, data_len, _ in self.main_dict["client_gradients"][self.round]:
             S_v += data_len
         for i, (_, validator, _, _, _)in enumerate(self.main_dict["votes"][self.round]):
@@ -70,11 +87,11 @@ class Owner:
         r_l = 1
         tao = 10
         PT_dict = {client: 0.0 for client, role in self.main_dict["role"][self.round].items() if role == "learner"}
+        sum_validator = sum([self.main_dict["contribution"][client] for client, role in self.main_dict["role"][self.round].items() if role == "validator"])
         for learner, validator, flag, data_len,  epochs in self.main_dict["votes"][self.round]:
             PT_dict[learner] += flag * self.main_dict["contribution"][validator]
-        sum_pt = sum(PT_dict.values())
         for key in PT_dict:
-            PT_dict[key] = PT_dict[key] / sum_pt
+            PT_dict[key] = PT_dict[key] / sum_validator
             if PT_dict[key] < 0.5:
                 suspicious_clients.append(key)
         for learner_sign, _, data_len, epochs in self.main_dict["client_gradients"][self.round]:
@@ -88,6 +105,7 @@ class Owner:
                 self.main_dict["contribution"][learner_sign] += 0
         for client in suspicious_clients:
             if client in self.main_dict["suspicious_clients"]:
+                print(f"{client} 已被多次标记为可疑客户端， {self.main_dict['suspicious_clients']} {self.main_dict['active_clients']} {self.main_dict['deactivate_clients']}")
                 self.main_dict["active_clients"].remove(client)
                 self.main_dict["deactivate_clients"].append( client)
         self.main_dict["suspicious_clients"] = suspicious_clients
@@ -99,21 +117,26 @@ class Owner:
         """
         contribution = list(self.main_dict["contribution"].items())
         contribution.sort(key=lambda x: x[1], reverse=True)
-        n = len(contribution)
+        activate_client = self.main_dict["active_clients"]
+        deactivate_client = self.main_dict["deactivate_clients"]
+        n = len(activate_client)
         aggregators_num = 1
         validators_num = (n - 1) // 3
         learners_num = n - aggregators_num - validators_num
         role_dict = {}
         for client_name, contribution in contribution:
-            if aggregators_num > 0:
-                role_dict[client_name] = "aggregator"
-                aggregators_num -= 1
-            elif validators_num > 0:
-                role_dict[client_name] = "validator"
-                validators_num -= 1
+            if client_name not in deactivate_client:
+                if aggregators_num > 0:
+                    role_dict[client_name] = "aggregator"
+                    aggregators_num -= 1
+                elif validators_num > 0:
+                    role_dict[client_name] = "validator"
+                    validators_num -= 1
+                else:
+                    role_dict[client_name] = "learner"
+                    learners_num -= 1
             else:
-                role_dict[client_name] = "learner"
-                learners_num -= 1
+                role_dict[client_name] = "deactivate_client"
         self.main_dict["role"].append(role_dict)
 
     def run(self):
@@ -133,12 +156,12 @@ class Owner:
             # info(f"Owner time To print main_dict {self.main_dict}")
         # 分配激励
         self.distribute_incentives()
+        self.round += 1
         # 每隔一定轮数，重新分配角色
         if self.round % self.rotation_cycle == 0:
             self.assign_roles()
         else:
             self.main_dict["role"].append(self.main_dict["role"][-1])
-        self.round += 1
         self.main_dict["contribution_history"].append(self.main_dict["contribution"])
         # info(f"Owner运行完成 {self.main_dict}")
 
