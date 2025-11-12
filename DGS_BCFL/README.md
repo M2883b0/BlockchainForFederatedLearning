@@ -26,3 +26,16 @@ main_dict = {
   "contribution_history": []
 }
 ```
+## 10% 恶意客户端
+对精确度影响
+![img_2.png](img_2.png)
+
+对角色轮换过程
+
+恶意客户端
+
+![img.png](img.png)
+
+0恶意
+
+![img_1.png](img_1.png)

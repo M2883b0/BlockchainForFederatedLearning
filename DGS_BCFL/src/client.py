@@ -42,7 +42,7 @@ if not os.path.exists("./client_gradients"):
 
 
 class Client:
-    def __init__(self, epochs: int, client_name: str, data_loader: DataLoader, ModelClass, main_dict: dict, lock: threading.Lock, test_loader: DataLoader, base_path: str = ".", learning_rate: float = 0.01):
+    def __init__(self, epochs: int, client_name: str, data_loader: DataLoader, ModelClass, main_dict: dict, lock: threading.Lock, test_loader: DataLoader, merge_data_loader: DataLoader, base_path:str = ".", learning_rate: float = 0.01):
         """
         初始化客户端
         
@@ -64,6 +64,7 @@ class Client:
         self.base_path = base_path
         self.lock = lock
         self.lr = learning_rate
+        self.merge_data_loader = merge_data_loader
     def init_model(self):
         return self.model_class()
 
@@ -156,7 +157,7 @@ class Client:
         aggregator = Aggregator(self.global_model)
         if self.round == 0 and self.main_dict["global_accuracy_history"] == []:
             # 评估初始模型
-            result = aggregator.evaluate_model(self.test_loader)
+            result = aggregator.evaluate_model(self.merge_data_loader)
             # 保存数据
             self.main_dict["global_accuracy_history"].append((result["accuracy"]))
 
@@ -185,7 +186,6 @@ class Client:
             vote_of_client = [i[2] for i in votes if i[0] == client_sign]
             # print(vote_of_client)
             if vote_of_client.count(True) > validator_nums // 2:
-                self.main_dict["contribution"][client_sign] = 1
                 gradient = self.load_gradient(gradient_path)
                 aggregator.collect_gradients(gradient)
             else:
@@ -203,7 +203,7 @@ class Client:
         path = self.save_global_model(self.base_path + "/global_model")
 
         info(f"[{self.name}] 全局模型更新完成！")
-        result = aggregator.evaluate_model(self.test_loader)
+        result = aggregator.evaluate_model(self.merge_data_loader)
         info(f"[{self.name}] 测试集准确率: {result['accuracy']:.2f}%")
         with self.lock:
             # 保存数据
@@ -308,8 +308,6 @@ class Client:
         del validator
 
 class BadClient(Client):
-    def __init__(self, epochs: int, client_name: str, data_loader: DataLoader, ModelClass, main_dict: dict,lock: threading.Lock, test_loader: DataLoader, base_path: str = ".", learning_rate: float = 0.01):
-        super().__init__(epochs=epochs, client_name=client_name, data_loader=data_loader, ModelClass=ModelClass, main_dict=main_dict,lock=lock, test_loader=test_loader, base_path=base_path, learning_rate=learning_rate)
     def run(self):
         super().run()
 
@@ -325,7 +323,8 @@ class BadClient(Client):
             # 评估初始模型
             result = aggregator.evaluate_model(self.test_loader)
             # 保存数据
-            self.main_dict["global_accuracy_history"].append((result["accuracy"]))
+            with self.lock:
+                self.main_dict["global_accuracy_history"].append((result["accuracy"]))
 
         info(f"[{self.name}] 聚合者开始收集梯度...")
         # 获取投票和梯度列表，等待所有客户端开始梯度计算, 验证者开始投票
@@ -351,7 +350,6 @@ class BadClient(Client):
         #     vote_of_client = [i[2] for i in votes if i[0] == client_sign]
         #     # print(vote_of_client)
         #     if vote_of_client.count(True) > validator_nums // 2:
-        #         self.main_dict["contribution"][client_sign] = 1
         #         gradient = self.load_gradient(gradient_path)
         #         aggregator.collect_gradients(gradient)
         #     else:
@@ -377,42 +375,42 @@ class BadClient(Client):
             self.main_dict["global_accuracy_history"].append((result["accuracy"]))
         del aggregator
 
-
-    def _run_as_learner(self):
-        """
-        以学习者角色运行
-
-        Returns:
-            Dict[str, torch.Tensor]: 训练后的梯度
-        """
-        if self.round % 2 == 0:
-            # 获取全局模型
-            self.get_global_model()
-
-            # 创建学习者实例
-            learner = FederatedLearner(self.global_model, self.data_loader, epochs=self.epochs, learning_rate=self.lr)
-
-            # 执行本地训练
-            info(f"[{self.name}] 学习者开始本地训练...")
-            train_results = learner.train()
-
-            info(f"[{self.name}] 训练完成！损失: {train_results['loss']:.4f}, 准确率: {train_results['accuracy']:.2f}%")
-            gradient = learner.export_gradients()
-            del learner
-        else:
-            # 导出梯度
-            gradient = self.load_gradient( f"{self.base_path}/client_gradients/{self.name}_{self.round-1}_gradient.pt")
-        gradient_path = self.save_gradient(gradient, self.base_path + "/client_gradients")
-        result = (self.sign(gradient), gradient_path, len(self.data_loader), self.epochs)
-        with self.lock:
-            if len(self.main_dict["client_gradients"]) == self.round:
-                self.main_dict["client_gradients"].append([result])
-            elif len(self.main_dict["client_gradients"]) == self.round + 1:
-                self.main_dict["client_gradients"][self.round].append(result)
-            else:
-                error(f"[{self.name}] 梯度列表长度错误！")
-                raise ValueError("无效的梯度列表长度")
-        info(f"[{self.name}] 梯度导出完成！")
+    #
+    # def _run_as_learner(self):
+    #     """
+    #     以学习者角色运行
+    #
+    #     Returns:
+    #         Dict[str, torch.Tensor]: 训练后的梯度
+    #     """
+    #     if self.round % 2 == 0:
+    #         # 获取全局模型
+    #         self.get_global_model()
+    #
+    #         # 创建学习者实例
+    #         learner = FederatedLearner(self.global_model, self.data_loader, epochs=self.epochs, learning_rate=self.lr)
+    #
+    #         # 执行本地训练
+    #         info(f"[{self.name}] 学习者开始本地训练...")
+    #         train_results = learner.train()
+    #
+    #         info(f"[{self.name}] 训练完成！损失: {train_results['loss']:.4f}, 准确率: {train_results['accuracy']:.2f}%")
+    #         gradient = learner.export_gradients()
+    #         del learner
+    #     else:
+    #         # 导出梯度
+    #         gradient = self.load_gradient( f"{self.base_path}/client_gradients/{self.name}_{self.round-1}_gradient.pt")
+    #     gradient_path = self.save_gradient(gradient, self.base_path + "/client_gradients")
+    #     result = (self.sign(gradient), gradient_path, len(self.data_loader), self.epochs)
+    #     with self.lock:
+    #         if len(self.main_dict["client_gradients"]) == self.round:
+    #             self.main_dict["client_gradients"].append([result])
+    #         elif len(self.main_dict["client_gradients"]) == self.round + 1:
+    #             self.main_dict["client_gradients"][self.round].append(result)
+    #         else:
+    #             error(f"[{self.name}] 梯度列表长度错误！")
+    #             raise ValueError("无效的梯度列表长度")
+    #     info(f"[{self.name}] 梯度导出完成！")
 
 
     def _run_as_validator(self):

@@ -26,7 +26,7 @@ class Aggregator:
     联邦学习聚合器类，负责收集、验证和聚合客户端的梯度更新
     """
     
-    def __init__(self, global_model: torch.nn.Module, learning_rate: float = 0.1,
+    def __init__(self, global_model: torch.nn.Module, learning_rate: float = 0.05,
                  gradient_threshold: float = None, max_gradients: int = None,
                  device: str = None, test_loader: Optional[torch.utils.data.DataLoader] = None):
         """
